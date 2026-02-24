@@ -15,3 +15,8 @@ python-dotenv
 fastapi
 uvicorn[standard]
 python-multipart
+thefuzz==0.22.1
+python-Levenshtein==0.25.0
+chromadb
+sentence-transformers
+langchain-text-splitters

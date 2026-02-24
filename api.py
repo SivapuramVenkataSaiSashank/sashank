@@ -29,6 +29,7 @@ os.makedirs(DATA_DIR, exist_ok=True)
 from document_processor import DocumentProcessor
 from ai_summarizer       import AISummarizer
 from bookmarks           import BookmarkManager
+from fuzzy_search        import search_files
 
 # ── load .env ───────────────────────────────────────────
 load_dotenv(os.path.join(BASE_DIR, ".env"))
@@ -108,6 +109,34 @@ def set_key(body: ApiKeyBody):
     if ok:
         return {"ok": True, "message": "Gemini AI connected ✅"}
     raise HTTPException(400, detail="Invalid API key. Check and try again.")
+
+
+# ══════════════════════════════════════════════════════════
+#  GEMINI CLI INTEROP
+# ══════════════════════════════════════════════════════════
+def get_filename_from_gemini(query: str) -> str:
+    """Uses the `gemini` CLI to extract searchable keywords from conversational input."""
+    import subprocess
+    safe_query = query.replace('"', '\\"')
+    prompt = f"Analyze this voice search query: '{safe_query}'. Extract ONLY the core keywords the user is looking for. Ignore conversational filler (e.g., 'find', 'search for', 'can you get', 'open'). If the keywords appear misspelled or slightly off (e.g. 'presentaton' instead of 'presentation'), CORRECT the spelling. If the keywords form a partial name (e.g. 'presentation guide' for 'presentation guide nlp'), return the clearest searchable base string ('presentation guide'). Respond with JUST the extracted phrase. Strictly no quotes, no periods, and no code blocks."
+    
+    try:
+        cmd = f'gemini -p "{prompt}"'
+        result = subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.STDOUT)
+        lines = [line.strip() for line in result.strip().split('\n') if line.strip()]
+        if lines:
+            return lines[-1]
+        return query
+    except subprocess.CalledProcessError as e:
+        print(f"Error calling gemini: {e}")
+        try:
+             result = subprocess.check_output(['gemini', 'ask', prompt], text=True)
+             return result.strip()
+        except:
+             return query
+    except FileNotFoundError:
+        print("Gemini CLI not found in PATH.")
+        return query
 
 
 # ══════════════════════════════════════════════════════════
@@ -464,6 +493,8 @@ def command(body: CommandBody):
             ok = doc.load(selected_file['path'])
             if ok:
                 bm.set_document(selected_file['path'])
+                session_state["awaiting_file"] = False # Reset on successful load
+                session_state["files"] = []
                 return {
                     "action": "file_loaded",
                     "title": str(doc.title or selected_file['name']),
@@ -475,6 +506,62 @@ def command(body: CommandBody):
             return {"action": "error", "message": f"Could not load {selected_file['name']}.", "tts_text": "Sorry, there was an error loading the file."}
         return {"action": "speak", "message": "File not recognized. Please try say 'open file' again.", "tts_text": "I didn't catch that. Please try saying open file again."}
 
+    # GLOBAL VOICE SEARCH
+    if any(k in c for k in ["search for", "find my", "look for", "locate"]):
+        # Extract keywords via Gemini CLI
+        target = get_filename_from_gemini(c)
+        
+        # Determine search paths based on OS
+        user_home = os.path.expanduser("~")
+        search_dirs = [
+             os.path.join(user_home, "Documents"),
+             os.path.join(user_home, "Downloads"),
+             os.path.join(user_home, "Desktop"),
+             VOICE_DOCS_DIR
+        ]
+        
+        found_matches = []
+        for d in search_dirs:
+             if os.path.exists(d):
+                 found_matches.extend(search_files(target, d, limit=2))
+        
+        # Sort globally by score and take top 5
+        found_matches.sort(key=lambda x: x['score'], reverse=True)
+        top_matches = found_matches[:5]
+        
+        if not top_matches:
+            return {"action": "speak", "message": f"No files found matching '{target}'.", "tts_text": f"I couldn't find any documents matching {target}."}
+            
+        session_state["awaiting_file"] = True
+        # Format the matches correctly for the file loader loop above
+        session_state["files"] = [{"name": m["filename"], "path": m["path"]} for m in top_matches]
+        session_state["files_offset"] = 0
+        
+        tts_parts = [f"I found {len(top_matches)} matches for {target}."]
+        for i, m in enumerate(top_matches):
+             clean_name = m['filename'].replace('.pdf','').replace('.docx','').replace('.doc','')
+             tts_parts.append(f"{i+1}: {clean_name}.")
+        tts_parts.append("Which one would you like to open? Say the number, or say 'repeat names'.")
+        
+        return {
+             "action": "speak", 
+             "message": f"Found matching files. Say a number (1-{len(top_matches)}) to select.",
+             "tts_text": " ".join(tts_parts)
+        }
+
+    # REPEAT CURRENT FILE LIST
+    if session_state.get("awaiting_file", False) and any(k in c for k in ["repeat", "say that again", "what were the options", "repeat names"]):
+        files = session_state["files"]
+        offset = session_state.get("files_offset", 0)
+        chunk = files[offset:offset+5]
+        tts_parts = [f"Here are the options again."]
+        for i, f in enumerate(chunk):
+            clean_name = f['name'].replace('.pdf','').replace('.docx','').replace('.doc','')
+            tts_parts.append(f"{offset+i+1}: {clean_name}.")
+        tts_parts.append("Say the number or name to open.")
+        return {"action": "speak", "message": "Repeating options...", "tts_text": " ".join(tts_parts)}
+
+    # LOCAL FOLDER SEARCH (The Study Desk fallback)
     if any(k in c for k in ["open file", "upload document", "upload file", "open document"]):
         # Find files ONLY in VoiceRead_Docs ("The Study Desk")
         search_dirs = [VOICE_DOCS_DIR]
