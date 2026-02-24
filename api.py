@@ -644,11 +644,11 @@ def command(body: CommandBody):
         doc.go_to_page(doc.page_count()-1); return {"action":"navigate", **page_state()}
 
     if "short summary" in c or "brief summary" in c:
-        return {"action": "stream_summary", "length": "short", **page_state()}
+        return {"action": "stream_summary", "length": "short", "query": c, **page_state()}
     if "detailed summary" in c or "long summary" in c:
-        return {"action": "stream_summary", "length": "detailed", **page_state()}
+        return {"action": "stream_summary", "length": "detailed", "query": c, **page_state()}
     if "summarize" in c or "summary" in c:
-        return {"action": "stream_summary", "length": "medium", **page_state()}
+        return {"action": "stream_summary", "length": "medium", "query": c, **page_state()}
 
     if "bookmark" in c and any(k in c for k in ["add","save","mark","this"]):
         bm.add_bookmark(doc.current_page, doc.get_current_label())

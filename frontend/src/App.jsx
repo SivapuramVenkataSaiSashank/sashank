@@ -786,7 +786,11 @@ function AppInner() {
   }
 
   // Update summarize flow to use chat flow
-  function summarizeManual(length, chapter) {
+  function summarizeManual(length, chapter, customQuery) {
+    if (customQuery && customQuery.split(' ').length > 3) {
+      askManual(customQuery)
+      return
+    }
     let q = `Please summarize the document`
     if (chapter) q += ` chapter ${chapter}`
     if (length) q += ` in ${length} detail`
@@ -824,7 +828,7 @@ function AppInner() {
       if (data.tts_text) handleSpeak(data.tts_text)
       if (data.message) showStatus(data.message, data.action === 'error' ? 'error' : 'ok')
       if (data.action === 'stop') handleSpeak(null)
-      if (data.action === 'stream_summary') summarizeManual(data.length, null)
+      if (data.action === 'stream_summary') summarizeManual(data.length, null, data.query)
       if (data.action === 'stream_answer') askManual(data.question)
       if (data.action === 'open_file_dialog') {
         const fileInput = document.querySelector('input[type="file"]')
