@@ -162,6 +162,60 @@ class AISummarizer:
         except Exception as e:
             yield f"⚠️ Could not answer: {e}"
 
+    def contextualize_query(self, question: str, history: list[dict] = None) -> str:
+        """
+        Rewrite a user's question to be standalone, based on previous chat history.
+        This ensures ChromaDB vector searches can accurately find context for follow-up questions
+        like 'What does it mean?' or 'Why did they say that?'.
+        """
+        if not self.is_ready():
+            return question
+            
+        history = history or []
+        # If there is no history, the question is already standalone
+        if not history:
+            return question
+
+        system_prompt = (
+            "You are a strict query reformulator. "
+            "Given a chat history and the latest user query, your ONLY job is to rewrite the latest user query "
+            "into a standalone searchable question that retains all context from the history.\n\n"
+            "CRITICAL RULES:\n"
+            "1. DO NOT answer the question.\n"
+            "2. DO NOT say 'I don't have information'.\n"
+            "3. ONLY return the rewritten standalone query.\n"
+            "4. If the query is already standalone, return it exactly as is."
+        )
+        
+        messages = [{"role": "system", "content": system_prompt}]
+        for msg in history:
+            if msg.get("role") in ["user", "assistant"]:
+                # Limit history length to prevent overwhelming the contextualizer
+                messages.append({"role": msg["role"], "content": msg["content"]})
+                
+        # Keep only the last 4 messages (2 exchanges) to save tokens and focus on immediate context
+        if len(messages) > 5:
+            messages = [messages[0]] + messages[-4:]
+            
+        messages.append({"role": "user", "content": question})
+
+        try:
+            with self._lock:
+                response = self._client.chat.completions.create(
+                    model=self.MODEL_NAME,
+                    messages=messages,
+                    temperature=0.2, # Low temperature for more deterministic/factual rewriting
+                    max_tokens=256,
+                    stream=False,
+                )
+            
+            rewritten_query = response.choices[0].message.content.strip()
+            print(f"[AISummarizer] Rewrote query: '{question}' -> '{rewritten_query}'")
+            return rewritten_query
+        except Exception as e:
+            print(f"[AISummarizer] Contextualize error: {e}")
+            return question
+
     # ─────────────────── Async wrappers ───────────────────
 
     def summarize_async(self, text: str, length: str, callback):

@@ -241,9 +241,13 @@ def ask(body: AskBody):
         raise HTTPException(400, detail="No document loaded.")
         
     def sse_generator():
-        # Retrieve the most relevant chunks using ChromaDB
-        relevant_context = doc.get_relevant_context(body.question, n_results=5)
+        # 1. Contextualize the query to handle follow-up questions
+        standalone_question = ai.contextualize_query(body.question, body.history)
         
+        # 2. Retrieve the most relevant chunks using ChromaDB using the STANDALONE question
+        relevant_context = doc.get_relevant_context(standalone_question, n_results=5)
+        
+        # 3. Pass the ORIGINAL question & history to the AI for generation (preserves natural dialogue)
         for chunk in ai.ask(body.question, relevant_context, body.history):
             yield chunk
             
