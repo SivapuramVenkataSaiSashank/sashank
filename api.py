@@ -559,9 +559,10 @@ def command(body: CommandBody):
             return {"action":"navigate","message":b["label"], **page_state()}
         return {"action":"error","message":"No bookmarks saved."}
 
-    # Default → treat as Q&A if it matches question keywords
-    opts = ["what is", "about", "explain", "question", "ask"]
-    if any(q in c for q in opts):
+    # If it loosely looks like a question or command, let the AI handle it instead of throwing an error
+    # This solves the issue of commands like "any exact three sentences" failing because they lack "what is"
+    # We treat anything longer than 2 words that didn't match native app commands as a question for the document.
+    if len(c.split()) >= 2:
         if not ai.is_ready():
             return {"action":"error","message":"Gemini API key not configured."}
         return {"action": "stream_answer", "question": c, **page_state()}
