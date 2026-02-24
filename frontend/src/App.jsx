@@ -939,43 +939,37 @@ function AppInner() {
       )}
 
       {pendingVoiceFiles && pendingVoiceFiles.length > 0 && (
-        <div style={{
-          position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-          background: 'var(--bg-card)', color: 'var(--text)', padding: '24px', borderRadius: '16px',
-          boxShadow: '0 12px 48px rgba(0,0,0,0.6)', zIndex: 10000,
-          border: '1px solid var(--border)', minWidth: '400px',
-          animation: 'fadeIn 0.2s ease-out'
-        }}>
-          <h3 style={{ marginTop: 0, marginBottom: 12 }}>🔍 Select a Document</h3>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginBottom: 16 }}>
-            Say the number, click an option, or say "repeat names".
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {pendingVoiceFiles.map((f, i) => {
-              // Extract extension for display
-              const parts = f.filename.split('.')
-              const ext = parts.length > 1 ? parts.pop().toUpperCase() : 'DOC'
-              const nameOnly = parts.join('.')
+        <div className="modal-overlay" onClick={() => setPendingVoiceFiles(null)}>
+          <div className="search-modal" onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+              <div style={{ background: 'var(--blue)', color: '#fff', width: 32, height: 32, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>
+                🔍
+              </div>
+              <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700 }}>Select a Document</h3>
+            </div>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '20px', paddingLeft: '44px' }}>
+              Say the number, click an option, or say "repeat names".
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {pendingVoiceFiles.map((f, i) => {
+                // Extract extension for display
+                const parts = f.filename.split('.')
+                const ext = parts.length > 1 ? parts.pop().toUpperCase() : 'DOC'
+                const nameOnly = parts.join('.')
 
-              return (
-                <button key={i} className="btn" style={{
-                  textAlign: 'left', display: 'flex', alignItems: 'center', background: 'var(--bg)', border: '1px solid var(--border)',
-                  padding: '12px 16px', borderRadius: '8px', color: 'var(--text)'
-                }}
-                  onClick={() => { setPendingVoiceFiles(null); dispatchCommand(f.filename) }}>
-                  <span style={{ color: 'var(--blue)', fontWeight: 600, marginRight: 12, minWidth: '24px' }}>{i + 1}.</span>
-                  <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nameOnly}</span>
-                  <span style={{
-                    fontSize: '0.7rem', background: 'var(--bg3)', border: '1px solid var(--border2)',
-                    padding: '2px 8px', borderRadius: '12px', color: 'var(--text-muted)', marginLeft: '12px', fontWeight: 600
-                  }}>
-                    {ext}
-                  </span>
-                </button>
-              )
-            })}
+                return (
+                  <button key={i} className="doc-option-btn" onClick={() => { setPendingVoiceFiles(null); dispatchCommand(f.filename) }}>
+                    <span className="num">{i + 1}.</span>
+                    <span className="name">{nameOnly}</span>
+                    <span className="badge">{ext}</span>
+                  </button>
+                )
+              })}
+            </div>
+            <div style={{ marginTop: '24px', paddingLeft: '44px' }}>
+              <button className="btn btn-ghost btn-sm" style={{ width: '100%' }} onClick={() => setPendingVoiceFiles(null)}>Cancel</button>
+            </div>
           </div>
-          <button className="btn btn-ghost mt-16" style={{ width: '100%' }} onClick={() => setPendingVoiceFiles(null)}>Cancel</button>
         </div>
       )}
 
