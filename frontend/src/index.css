@@ -80,8 +80,9 @@ a:hover {
 .sidebar {
   width: 280px;
   flex-shrink: 0;
-  background: var(--bg2);
-  border-right: 1px solid var(--border);
+  background: var(--bg3);
+  box-shadow: inset 6px 6px 12px rgba(0, 0, 0, 0.9), inset -3px -3px 8px rgba(255, 255, 255, 0.02);
+  border-right: 1px solid var(--border-soft);
   display: flex;
   flex-direction: column;
   overflow-y: auto;
@@ -753,19 +754,23 @@ textarea:focus {
 
 /* ══ File drop zone ══ */
 .drop-zone {
-  border: 2px dashed var(--border2);
-  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-soft);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-md);
   padding: 28px 16px;
   text-align: center;
   cursor: pointer;
   transition: all var(--transition);
-  background: transparent;
+  background: linear-gradient(145deg, #161616, #101010);
+  box-shadow: 5px 5px 12px rgba(0, 0, 0, 0.9), -3px -3px 8px rgba(255, 255, 255, 0.03);
 }
 
 .drop-zone:hover,
 .drop-zone.drag {
   border-color: var(--blue);
-  background: var(--blue-dim);
+  box-shadow: 12px 12px 24px rgba(0, 0, 0, 0.9), -5px -5px 12px rgba(255, 255, 255, 0.04);
+  transform: translateY(-2px);
 }
 
 .drop-zone .dz-icon {
