@@ -30,6 +30,19 @@ Blind or visually impaired learners face difficulty accessing digital documents 
 
 ---
 
+## 🧩 A11y Hover Reader Extension (Included)
+This project includes a custom Chrome/Edge extension (**A11y Hover Reader**) that provides a live proximity radar and reads out elements instantly on hover.
+
+**How to connect and use it:**
+1. Open Chrome or Edge and go to `chrome://extensions/` (or `edge://extensions/`).
+2. Turn on **Developer mode** in the top right.
+3. Click **Load unpacked** and select the `a11y-hover-reader` folder inside this project.
+4. Pin the extension to your browser toolbar. Use `Ctrl+Shift+A` or click the icon to toggle it ON/OFF.
+5. While ON, hover over any button, text field, or document text in the VoiceRead app, and it will read it aloud using the native browser TTS.
+
+
+---
+
 ## Setup & Run
 
 ### Option 1: One-click launcher (Windows)
