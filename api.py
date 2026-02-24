@@ -349,12 +349,17 @@ def tts(body: TTSBody):
 # ══════════════════════════════════════════════════════════
 #  VOICE COMMAND DISPATCH
 # ══════════════════════════════════════════════════════════
+session_state = {"awaiting_file": False, "files": []}
+VOICE_DOCS_DIR = os.path.join(BASE_DIR, "VoiceRead_Docs")
+os.makedirs(VOICE_DOCS_DIR, exist_ok=True)
+
 @app.post("/api/command")
 def command(body: CommandBody):
     """
     Parse a natural-language voice command and return action + fresh page state.
     The heavy lifting stays on the server so React stays simple.
     """
+    global session_state
     c = body.text.lower().strip()
 
     def page_state():
@@ -377,7 +382,117 @@ def command(body: CommandBody):
         return {"action":"speak","message":"Commands: open file, read document, summarize, brief summary, detailed summary, next page, previous page, go to page N, bookmark this, go to bookmark, ask your question, export summary, stop."}
 
     if any(k in c for k in ["stop","pause","quiet"]):
+        session_state["awaiting_file"] = False
         return {"action":"stop","message":"Stopped."}
+
+    if session_state.get("awaiting_file"):
+        files = session_state["files"]
+        offset = session_state.get("files_offset", 0)
+        
+        if any(k in c for k in ["cancel", "nevermind"]):
+            session_state["awaiting_file"] = False
+            return {"action": "speak", "message": "Cancelled file selection.", "tts_text": "Okay, cancelled."}
+
+        # Handling "next" pagination
+        if any(k in c for k in ["next", "more", "continue", "next page"]):
+            new_offset = offset + 5
+            if new_offset >= len(files):
+                return {"action": "speak", "message": "You are at the end of the list. Say 'previous' to go back.", "tts_text": "You are at the end of the list. Say 'previous' to go back."}
+            
+            session_state["files_offset"] = new_offset
+            chunk = files[new_offset:new_offset+5]
+            tts_parts = [f"Reading files {new_offset+1} to {min(new_offset+5, len(files))}."]
+            for i, f in enumerate(chunk):
+                clean_name = f['name'].replace('.pdf','').replace('.docx','').replace('.doc','')
+                tts_parts.append(f"{new_offset+i+1}: {clean_name}.")
+            tts_parts.append("Say the number, the name, or 'next' for more.")
+            return {"action": "speak", "message": "Listening for file selection...", "tts_text": " ".join(tts_parts)}
+
+        # Handling "previous" pagination
+        if any(k in c for k in ["previous", "back", "go back", "previous page"]):
+            if offset == 0:
+                return {"action": "speak", "message": "You are at the beginning of the list. Say 'next' for more.", "tts_text": "You are already at the beginning of the list. Say 'next' for more."}
+            
+            new_offset = max(0, offset - 5)
+            session_state["files_offset"] = new_offset
+            chunk = files[new_offset:new_offset+5]
+            tts_parts = [f"Reading files {new_offset+1} to {min(new_offset+5, len(files))}."]
+            for i, f in enumerate(chunk):
+                clean_name = f['name'].replace('.pdf','').replace('.docx','').replace('.doc','')
+                tts_parts.append(f"{new_offset+i+1}: {clean_name}.")
+            tts_parts.append("Say the number, the name, or 'next' for more.")
+            return {"action": "speak", "message": "Listening for file selection...", "tts_text": " ".join(tts_parts)}
+
+        session_state["awaiting_file"] = False
+        n = num_from(c)
+        selected_file = None
+        if n and 1 <= n <= len(files):
+            selected_file = files[n-1]
+        else:
+            for f in files:
+                clean_name = f['name'].lower().replace(".pdf","").replace(".docx","").replace(".txt","").replace(".epub","")
+                if clean_name in c:
+                    selected_file = f
+                    break
+        
+        if selected_file:
+            ok = doc.load(selected_file['path'])
+            if ok:
+                bm.set_document(selected_file['path'])
+                return {
+                    "action": "file_loaded",
+                    "title": str(doc.title or selected_file['name']),
+                    "ext": str(doc.doc_type or "doc"),
+                    "message": f"Opened {selected_file['name']}. Say 'read document' to start.",
+                    "tts_text": f"Opened {selected_file['name']}. You can say 'read document' or 'summarize'.",
+                    **page_state()
+                }
+            return {"action": "error", "message": f"Could not load {selected_file['name']}.", "tts_text": "Sorry, there was an error loading the file."}
+        return {"action": "speak", "message": "File not recognized. Please try say 'open file' again.", "tts_text": "I didn't catch that. Please try saying open file again."}
+
+    if any(k in c for k in ["open file", "upload document", "upload file", "open document"]):
+        # Find files in VoiceRead_Docs, User Downloads, and User Documents
+        search_dirs = [VOICE_DOCS_DIR]
+        import platform
+        if platform.system() == "Windows":
+            user_profile = os.environ.get('USERPROFILE')
+            if user_profile:
+                search_dirs.append(os.path.join(user_profile, 'Downloads'))
+                search_dirs.append(os.path.join(user_profile, 'Documents'))
+        
+        found_files = []
+        for d in search_dirs:
+            if not os.path.exists(d): continue
+            try:
+                for f in os.listdir(d):
+                    if f.lower().endswith(('.pdf', '.docx', '.doc')):
+                        found_files.append({"name": f, "path": os.path.join(d, f)})
+            except PermissionError:
+                pass
+                
+        # Sort by modification time so newest are read first
+        found_files.sort(key=lambda x: os.path.getmtime(x['path']) if os.path.exists(x['path']) else 0, reverse=True)
+
+        if not found_files:
+            return {"action": "speak", "message": "No PDFs or Word documents found in VoiceRead_Docs, Downloads, or Documents folders.", "tts_text": "I could not find any P D Fs or Word documents in your folders."}
+        
+        session_state["awaiting_file"] = True
+        session_state["files"] = found_files
+        session_state["files_offset"] = 0
+        
+        tts_parts = [f"I found {len(found_files)} files."]
+        
+        chunk = found_files[:5]
+        for i, f in enumerate(chunk):
+            clean_name = f['name'].replace('.pdf','').replace('.docx','').replace('.doc','')
+            tts_parts.append(f"{i+1}: {clean_name}.")
+            
+        if len(found_files) > 5:
+            tts_parts.append("Say the number, the name, or say 'next' to hear the next files.")
+        else:
+            tts_parts.append("Which one would you like to open? Say the number or the name.")
+        
+        return {"action": "speak", "message": f"Listening for file selection (1-{len(found_files)})...", "tts_text": " ".join(tts_parts)}
 
     if not doc.page_count():
         return {"action":"error","message":"No document loaded."}

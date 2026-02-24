@@ -799,7 +799,13 @@ function AppInner() {
         setMicState('idle')
         return
       }
-      if (data.page !== undefined) {
+      if (data.action === 'file_loaded') {
+        setDocState({
+          loaded: true, page: data.page, total: data.total,
+          label: data.label, text: data.text, title: data.title, ext: data.ext
+        })
+        setActiveTab('doc')
+      } else if (data.page !== undefined) {
         setDocState(s => ({ ...s, page: data.page, total: data.total, label: data.label, text: data.text }))
       }
       if (data.bookmarks) setBookmarks(data.bookmarks)
