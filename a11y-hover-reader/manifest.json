@@ -1,0 +1,45 @@
+{
+    "manifest_version": 3,
+    "name": "A11y Hover Reader",
+    "version": "4.0.0",
+    "description": "Hover any element to hear it spoken. Click the toolbar icon to toggle on/off.",
+    "permissions": [
+        "storage",
+        "activeTab",
+        "scripting",
+        "contextMenus",
+        "tts"
+    ],
+    "host_permissions": [
+        "<all_urls>",
+        "file:///*"
+    ],
+    "background": {
+        "service_worker": "background/service-worker.js"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "<all_urls>",
+                "file:///*"
+            ],
+            "js": [
+                "content/content.js"
+            ],
+            "run_at": "document_idle"
+        }
+    ],
+    "action": {
+        "default_title": "A11y Hover Reader — click to toggle"
+    },
+    "commands": {
+        "toggle-narration": {
+            "suggested_key": {
+                "default": "Ctrl+Shift+A",
+                "mac": "Command+Shift+A"
+            },
+            "description": "Toggle A11y Narration on/off"
+        }
+    },
+    "options_page": "options/options.html"
+}

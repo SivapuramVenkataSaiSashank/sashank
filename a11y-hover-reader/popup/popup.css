@@ -1,0 +1,94 @@
+body {
+    font-family: system-ui, sans-serif;
+    width: 320px;
+    margin: 0;
+    padding: 15px;
+    background: #fff;
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid #eee;
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+}
+
+h1 {
+    font-size: 1.2rem;
+    margin: 0;
+    color: #111;
+}
+
+#optionsBtn {
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 5px;
+}
+
+button {
+    width: 100%;
+    display: block;
+    background: #f3f4f6;
+    border: 1px solid #d1d5db;
+    color: #374151;
+    padding: 10px;
+    font-weight: 600;
+    text-align: center;
+    border-radius: 6px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: 0.2s;
+}
+
+button:hover {
+    background: #e5e7eb;
+}
+
+button:focus {
+    outline: 2px solid #3b82f6;
+    outline-offset: 2px;
+}
+
+button.danger {
+    background: #fee2e2;
+    border-color: #fca5a5;
+    color: #991b1b;
+}
+
+button.danger:hover {
+    background: #fecaca;
+}
+
+.file-area {
+    background: #f9fafb;
+    padding: 15px;
+    border-radius: 6px;
+    margin-top: 15px;
+    border: 1px dashed #cbd5e1;
+}
+
+.file-area h2 {
+    font-size: 1rem;
+    margin-top: 0;
+}
+
+input[type="file"] {
+    width: 100%;
+    margin-bottom: 10px;
+}
+
+#fileStatus {
+    font-size: 0.9rem;
+    margin-bottom: 10px;
+    color: #475569;
+}
+
+.note {
+    font-size: 0.75rem;
+    color: #64748b;
+    margin-top: 10px;
+}

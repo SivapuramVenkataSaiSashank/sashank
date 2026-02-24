@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>A11y Hover Reader</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+
+<body>
+    <div class="header">
+        <h1>A11y Reader</h1>
+        <button id="optionsBtn" aria-label="Settings">⚙️</button>
+    </div>
+
+    <div class="commands">
+        <button id="btnToggleNarration"
+            style="padding:15px; font-size: 1.1em; background-color: #d1fae5; color: #065f46; border: 2px solid #059669;">Start
+            Narration</button>
+        <button id="btnReadSel">Summarize Selection</button>
+        <button id="btnReadPara">Read Paragraph</button>
+        <button id="btnRepeat">Repeat Last</button>
+    </div>
+
+    <div class="file-area" role="region" aria-label="Document Reader">
+        <h2>Read Document</h2>
+        <p>Supports .txt files locally</p>
+        <input type="file" id="fileInput" accept=".txt,.rtf">
+        <div id="fileStatus" aria-live="polite"></div>
+        <button id="btnSummarizeFile" disabled>Summarize File</button>
+        <p class="note">Note: For PDF & DOCX, include mammoth.js and pdf.js libs in real deployment branch.</p>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+
+</html>

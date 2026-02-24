@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>A11y Demo Page</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 2rem;
+            max-width: 800px;
+        }
+
+        .card {
+            border: 1px solid #ccc;
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 8px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        dialog {
+            padding: 2rem;
+            border-radius: 8px;
+            border: 1px solid #aaa;
+        }
+    </style>
+</head>
+
+<body>
+    <header role="banner">
+        <h1>A11y Hover Reader Demo</h1>
+        <p>Test the hover, focus, and document reader capabilities here.</p>
+    </header>
+
+    <main role="main">
+        <section aria-labelledby="interactive-sec" class="card">
+            <h2 id="interactive-sec">Interactive Elements</h2>
+            <button aria-label="Confirm Action">Click Me (Aria-label: Confirm)</button>
+            <br><br>
+            <input type="text" placeholder="Type your name here" alt="Name Input">
+            <br><br>
+            <button id="openModal">Open Dialog</button>
+        </section>
+
+        <section aria-labelledby="text-sec" class="card">
+            <h2 id="text-sec">Text Summarization (Select this)</h2>
+            <p>
+                Visually impaired users often face significant barriers when navigating the web and dealing with dense
+                digital documents. A screen reader that dynamically verbalizes the specific element a user hovers over
+                can greatly reduce friction. Such features minimize the cognitive load of interpreting full-page
+                readouts when a user only wants to inspect a single component, like a button or a specific paragraph.
+            </p>
+        </section>
+
+        <section class="card" aria-labelledby="file-sec">
+            <h2 id="file-sec">Drop / Select File</h2>
+            <p>Upload a .txt document (or PDF/.docx if libraries are injected).</p>
+            <input type="file" aria-label="Upload document to read">
+        </section>
+    </main>
+
+    <dialog id="modal" aria-labelledby="modal-title" aria-describedby="modal-desc">
+        <h2 id="modal-title">Important Notice</h2>
+        <p id="modal-desc">This is a modal dialog. Test keyboard tabbing inside it.</p>
+        <button id="closeModal">Close</button>
+    </dialog>
+
+    <script>
+        const modal = document.getElementById('modal');
+        document.getElementById('openModal').onclick = () => modal.showModal();
+        document.getElementById('closeModal').onclick = () => modal.close();
+    </script>
+</body>
+
+</html>
