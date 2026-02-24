@@ -1,0 +1,438 @@
+"""
+api.py  — FastAPI backend for VoiceRead
+Serves the React frontend via REST endpoints.
+API key loaded from .env (GEMINI_API_KEY).
+"""
+
+import os
+import sys
+import io
+import re
+import json
+import tempfile
+import base64
+import threading
+
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse, JSONResponse
+from pydantic import BaseModel
+from dotenv import load_dotenv
+
+# ── path setup ──────────────────────────────────────────
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+SRC_DIR  = os.path.join(BASE_DIR, "src")
+DATA_DIR = os.path.join(BASE_DIR, "data")
+sys.path.insert(0, SRC_DIR)
+os.makedirs(DATA_DIR, exist_ok=True)
+
+from document_processor import DocumentProcessor
+from ai_summarizer       import AISummarizer
+from bookmarks           import BookmarkManager
+
+# ── load .env ───────────────────────────────────────────
+load_dotenv(os.path.join(BASE_DIR, ".env"))
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
+
+# ── singletons ──────────────────────────────────────────
+doc = DocumentProcessor()
+ai  = AISummarizer()
+bm  = BookmarkManager(DATA_DIR)
+
+# Auto-initialise AI if key present in .env
+if GROQ_API_KEY and GROQ_API_KEY != "your_groq_api_key_here":
+    ai.set_api_key(GROQ_API_KEY)
+
+# ██████  App  ████████████████████████████████████████████
+app = FastAPI(title="VoiceRead API", version="2.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# ══════════════════════════════════════════════════════════
+#  Pydantic models
+# ══════════════════════════════════════════════════════════
+class NavigateBody(BaseModel):
+    action: str          # "next" | "prev" | "goto" | "first" | "last"
+    page:   int = 0      # 0-indexed, used only for "goto"
+
+class SummarizeBody(BaseModel):
+    length:      str = "medium"   # short | medium | detailed
+    chapter_num: int | None = None  # 1-indexed; None = full doc
+
+class AskBody(BaseModel):
+    question: str
+    history: list[dict] = []
+
+
+class BookmarkBody(BaseModel):
+    page:  int
+    label: str = ""
+
+class TTSBody(BaseModel):
+    text: str
+
+class ApiKeyBody(BaseModel):
+    key: str
+
+class CommandBody(BaseModel):
+    text: str
+
+
+# ══════════════════════════════════════════════════════════
+#  STATUS
+# ══════════════════════════════════════════════════════════
+@app.get("/api/status")
+def status():
+    return {
+        "api_ready":   ai.is_ready(),
+        "doc_loaded":  bool(doc.file_path and doc.page_count() > 0),
+        "doc_title":   doc.title,
+        "doc_type":    doc.doc_type,
+        "page_count":  doc.page_count(),
+        "current_page": doc.current_page,
+    }
+
+
+# ══════════════════════════════════════════════════════════
+#  API KEY
+# ══════════════════════════════════════════════════════════
+@app.post("/api/set_key")
+def set_key(body: ApiKeyBody):
+    ok = ai.set_api_key(body.key.strip())
+    if ok:
+        return {"ok": True, "message": "Gemini AI connected ✅"}
+    raise HTTPException(400, detail="Invalid API key. Check and try again.")
+
+
+# ══════════════════════════════════════════════════════════
+#  DOCUMENT UPLOAD
+# ══════════════════════════════════════════════════════════
+@app.post("/api/upload")
+async def upload_file(file: UploadFile = File(...)):
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in (".pdf", ".docx", ".doc", ".epub", ".txt"):
+        raise HTTPException(400, detail=f"Unsupported file type: {ext}")
+
+    # Save to temp file
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
+    tmp.write(await file.read())
+    tmp.close()
+
+    ok = doc.load(tmp.name)
+    if not ok:
+        raise HTTPException(500, detail="Could not parse document.")
+
+    bm.set_document(tmp.name)
+
+    return {
+        "ok":          True,
+        "title":       str(doc.title or "Untitled"),
+        "doc_type":    str(doc.doc_type or "doc"),
+        "page_count":  doc.page_count(),
+        "current_page": 0,
+        "label":       str(doc.get_current_label() or "Page 1"),
+        "text":        str(doc.get_current_text() or ""),
+    }
+
+
+# ══════════════════════════════════════════════════════════
+#  PAGE ACCESS
+# ══════════════════════════════════════════════════════════
+@app.get("/api/page/{n}")
+def get_page(n: int):
+    if not doc.page_count():
+        raise HTTPException(400, detail="No document loaded.")
+    doc.go_to_page(n)
+    return {
+        "page":  doc.current_page,
+        "total": doc.page_count(),
+        "label": str(doc.get_current_label() or ""),
+        "text":  str(doc.get_current_text() or ""),
+    }
+
+
+@app.post("/api/navigate")
+def navigate(body: NavigateBody):
+    if not doc.page_count():
+        raise HTTPException(400, detail="No document loaded.")
+
+    if body.action == "next":
+        doc.next_page()
+    elif body.action == "prev":
+        doc.prev_page()
+    elif body.action == "goto":
+        doc.go_to_page(body.page)
+    elif body.action == "first":
+        doc.go_to_page(0)
+    elif body.action == "last":
+        doc.go_to_page(doc.page_count() - 1)
+
+    return {
+        "page":  doc.current_page,
+        "total": doc.page_count(),
+        "label": str(doc.get_current_label() or ""),
+        "text":  str(doc.get_current_text() or ""),
+    }
+
+
+# ══════════════════════════════════════════════════════════
+#  SEARCH
+# ══════════════════════════════════════════════════════════
+@app.get("/api/search")
+def search(q: str):
+    if not doc.page_count():
+        raise HTTPException(400, detail="No document loaded.")
+    results = doc.search(q)
+    return {"results": results, "count": len(results)}
+
+
+# ══════════════════════════════════════════════════════════
+#  FULL TEXT (for AI)
+# ══════════════════════════════════════════════════════════
+@app.get("/api/full_text")
+def full_text():
+    if not doc.page_count():
+        raise HTTPException(400, detail="No document loaded.")
+    return {"text": doc.get_full_text()}
+
+
+# ══════════════════════════════════════════════════════════
+#  AI SUMMARIZE
+# ══════════════════════════════════════════════════════════
+@app.post("/api/summarize")
+def summarize(body: SummarizeBody):
+    if not ai.is_ready():
+        raise HTTPException(503, detail="Gemini API not configured. Set your key first.")
+    if not doc.page_count():
+        raise HTTPException(400, detail="No document loaded.")
+
+    text = (doc.get_chapter_text(body.chapter_num)
+            if body.chapter_num
+            else doc.get_full_text())
+            
+    # Return a Server-Sent Events stream
+    def sse_generator():
+        for chunk in ai.summarize(text, body.length):
+            yield chunk
+
+    return StreamingResponse(sse_generator(), media_type="text/plain")
+
+
+# ══════════════════════════════════════════════════════════
+#  AI Q&A
+# ══════════════════════════════════════════════════════════
+@app.post("/api/ask")
+def ask(body: AskBody):
+    if not ai.is_ready():
+        raise HTTPException(503, detail="Gemini API not configured.")
+    if not doc.page_count():
+        raise HTTPException(400, detail="No document loaded.")
+        
+    def sse_generator():
+        for chunk in ai.ask(body.question, doc.get_full_text(), body.history):
+            yield chunk
+            
+    return StreamingResponse(sse_generator(), media_type="text/plain")
+
+
+# ══════════════════════════════════════════════════════════
+#  BOOKMARKS
+# ══════════════════════════════════════════════════════════
+@app.get("/api/bookmarks")
+def get_bookmarks():
+    return {"bookmarks": bm.get_bookmarks()}
+
+@app.post("/api/bookmarks")
+def add_bookmark(body: BookmarkBody):
+    label = body.label or doc.get_current_label()
+    bm.add_bookmark(body.page, label)
+    return {"ok": True, "bookmarks": bm.get_bookmarks()}
+
+@app.delete("/api/bookmarks/{page}")
+def delete_bookmark(page: int):
+    bm.remove_bookmark(page)
+    return {"ok": True, "bookmarks": bm.get_bookmarks()}
+
+
+# ══════════════════════════════════════════════════════════
+#  TTS  (Coqui TTS → wav bytes)
+# ══════════════════════════════════════════════════════════
+tts_model = None
+tts_lock = threading.Lock()
+tts_cache = {}
+
+def get_tts():
+    global tts_model
+    with tts_lock:
+        if tts_model is None:
+            # eSpeak NG must be in PATH on Windows for Coqui TTS processing
+            espeak_path = r"C:\Program Files\eSpeak NG"
+            if espeak_path not in os.environ.get("PATH", ""):
+                os.environ["PATH"] += os.pathsep + espeak_path
+                
+def get_tts():
+    global tts_model
+    with tts_lock:
+        if tts_model is None:
+            # eSpeak NG must be in PATH on Windows for Coqui TTS processing
+            espeak_path = r"C:\Program Files\eSpeak NG"
+            if espeak_path not in os.environ.get("PATH", ""):
+                os.environ["PATH"] += os.pathsep + espeak_path
+                
+            from TTS.api import TTS
+            # Load high-quality VITS model (excellent speed/quality ratio)
+            tts_model = TTS("tts_models/en/ljspeech/vits")
+    return tts_model
+
+def warm_up_tts():
+    model = get_tts()
+    # Generate the common phrases to pre-warm the model and populate the cache
+    phrases = [
+        "Welcome to Voice Read. Please upload a document to begin.",
+        "Okay, cancelled. Please try asking again.",
+        "I didn't catch that. Please say yes to proceed, or no to cancel."
+    ]
+    for text in phrases:
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                tmp_path = tmp.name
+            model.tts_to_file(text=text, file_path=tmp_path)
+            with open(tmp_path, "rb") as f:
+                tts_cache[text] = f.read()
+            os.remove(tmp_path)
+        except Exception:
+            pass # ignore warmup errors
+
+# Pre-load and warm up TTS in the background so it's ready when the user connects
+threading.Thread(target=warm_up_tts, daemon=True).start()
+
+@app.post("/api/tts")
+def tts(body: TTSBody):
+    try:
+        if body.text in tts_cache:
+            buf = io.BytesIO(tts_cache[body.text])
+            return StreamingResponse(buf, media_type="audio/wav", headers={"Content-Disposition": "inline"})
+
+        model = get_tts()
+        
+        # TTS API typically requires writing to a file, so we use a tempfile
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            tmp_path = tmp.name
+        
+        # Ensure we don't exceed model sequence length safely
+        text_to_speak = body.text[:3500] 
+        model.tts_to_file(text=text_to_speak, file_path=tmp_path)
+        
+        with open(tmp_path, "rb") as f:
+            audio_data = f.read()
+            
+        os.remove(tmp_path)
+        
+        # Cache the generated audio
+        if len(tts_cache) > 100:
+            tts_cache.pop(next(iter(tts_cache)))
+        tts_cache[body.text] = audio_data
+        
+        buf = io.BytesIO(audio_data)
+        return StreamingResponse(buf, media_type="audio/wav",
+                                 headers={"Content-Disposition": "inline"})
+    except Exception as e:
+        raise HTTPException(500, detail=f"TTS error: {e}")
+
+
+# ══════════════════════════════════════════════════════════
+#  VOICE COMMAND DISPATCH
+# ══════════════════════════════════════════════════════════
+@app.post("/api/command")
+def command(body: CommandBody):
+    """
+    Parse a natural-language voice command and return action + fresh page state.
+    The heavy lifting stays on the server so React stays simple.
+    """
+    c = body.text.lower().strip()
+
+    def page_state():
+        return {
+            "page":  doc.current_page,
+            "total": doc.page_count(),
+            "label": doc.get_current_label(),
+            "text":  doc.get_current_text(),
+        }
+
+    def num_from(text):
+        words = {"one":1,"two":2,"three":3,"four":4,"five":5,"six":6,"seven":7,
+                 "eight":8,"nine":9,"ten":10,"eleven":11,"twelve":12,"fifteen":15,"twenty":20}
+        for w,v in words.items():
+            if w in text: return v
+        m = re.search(r'\b(\d+)\b', text)
+        return int(m.group(1)) if m else None
+
+    if "help" in c:
+        return {"action":"speak","message":"Commands: open file, read document, summarize, brief summary, detailed summary, next page, previous page, go to page N, bookmark this, go to bookmark, ask your question, export summary, stop."}
+
+    if any(k in c for k in ["stop","pause","quiet"]):
+        return {"action":"stop","message":"Stopped."}
+
+    if not doc.page_count():
+        return {"action":"error","message":"No document loaded."}
+
+    if any(k in c for k in ["read document","read page","read this","start reading"]):
+        t = doc.get_current_label() + ". " + doc.get_current_text()
+        return {"action":"read","tts_text":t, **page_state()}
+
+    if "next page" in c or c == "next" or "forward" in c:
+        doc.next_page()
+        return {"action":"navigate","message":doc.get_current_label(), **page_state()}
+
+    if any(k in c for k in ["previous page","prev page","go back"]):
+        doc.prev_page()
+        return {"action":"navigate","message":doc.get_current_label(), **page_state()}
+
+    if "go to page" in c or "jump to page" in c:
+        n = num_from(c)
+        if n: doc.go_to_page(n-1)
+        return {"action":"navigate","message":doc.get_current_label(), **page_state()}
+
+    if "first page" in c or "beginning" in c:
+        doc.go_to_page(0); return {"action":"navigate", **page_state()}
+
+    if "last page" in c or "end of" in c:
+        doc.go_to_page(doc.page_count()-1); return {"action":"navigate", **page_state()}
+
+    if "short summary" in c or "brief summary" in c:
+        return {"action": "stream_summary", "length": "short", **page_state()}
+    if "detailed summary" in c or "long summary" in c:
+        return {"action": "stream_summary", "length": "detailed", **page_state()}
+    if "summarize" in c or "summary" in c:
+        return {"action": "stream_summary", "length": "medium", **page_state()}
+
+    if "bookmark" in c and any(k in c for k in ["add","save","mark","this"]):
+        bm.add_bookmark(doc.current_page, doc.get_current_label())
+        return {"action":"bookmark","message":f"Bookmarked: {doc.get_current_label()}","bookmarks":bm.get_bookmarks()}
+
+    if "go to bookmark" in c or "my bookmark" in c:
+        bookmarks = bm.get_bookmarks()
+        if bookmarks:
+            b = bookmarks[-1]; doc.go_to_page(b["page"])
+            return {"action":"navigate","message":b["label"], **page_state()}
+        return {"action":"error","message":"No bookmarks saved."}
+
+    # Default → treat as Q&A if it matches question keywords
+    opts = ["what is", "about", "explain", "question", "ask"]
+    if any(q in c for q in opts):
+        if not ai.is_ready():
+            return {"action":"error","message":"Gemini API key not configured."}
+        return {"action": "stream_answer", "question": c, **page_state()}
+
+    return {"action":"error","message":f"Command not recognized: {c}"}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)

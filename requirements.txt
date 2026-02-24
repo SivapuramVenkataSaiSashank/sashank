@@ -1,0 +1,17 @@
+PyMuPDF
+python-docx
+ebooklib
+beautifulsoup4
+SpeechRecognition
+pyttsx3
+TTS
+pygame
+google-genai
+groq
+pillow
+requests
+streamlit
+python-dotenv
+fastapi
+uvicorn[standard]
+python-multipart
