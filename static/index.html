@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VoiceRead AI - Professional Reading Assistant</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body class="dark-theme">
+
+    <!-- Main App Shell (Always Active) -->
+    <div id="app-shell" class="view active" style="opacity: 1;">
+        <aside class="sidebar inset-3d">
+            <div class="sidebar-header">
+                <h3>VoiceRead</h3>
+                <span class="version-badge">HackxAmrita 2.0</span>
+            </div>
+
+            <div class="api-status-pill ready">
+                <span class="dot"></span>
+                <span id="api-status-text">Checking API...</span>
+            </div>
+
+            <div class="upload-zone inset-3d-soft" id="drop-zone">
+                <div class="upload-icon-style" id="upload-icon">DOC</div>
+                <p id="upload-text">Click or drag PDF / DOCX / EPUB / TXT</p>
+                <input type="file" id="file-input" style="display: none;" accept=".pdf,.docx,.doc,.epub,.txt">
+            </div>
+
+            <div class="doc-info-panel" id="doc-panel" style="display: none;">
+                <h4 id="file-name">Document.pdf</h4>
+                <div class="metrics-row">
+                    <div class="metric-box card-3d-mini">
+                        <span class="label">Page</span>
+                        <span class="value" id="curr-page">1</span>
+                    </div>
+                    <div class="metric-box card-3d-mini">
+                        <span class="label">Total</span>
+                        <span class="value" id="total-pages">1</span>
+                    </div>
+                </div>
+                <div class="pagination-row">
+                    <button class="btn btn-secondary btn-sm" id="btn-prev">Prev</button>
+                    <button class="btn btn-secondary btn-sm" id="btn-next">Next</button>
+                </div>
+                <!-- Go To Page input box -->
+                <div class="pagination-row" style="margin-top: 8px;">
+                    <input type="number" id="goto-input" min="1" value="1" style="width: 60px; padding: 4px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg); color: var(--text);">
+                    <button class="btn btn-primary btn-sm" id="btn-goto" style="flex:1;">Go →</button>
+                </div>
+            </div>
+
+            <nav class="sidebar-bookmarks">
+                <div class="section-header">
+                    <span>Bookmarks</span>
+                    <button class="btn btn-ghost btn-sm" id="btn-add-bookmark">+ Add</button>
+                </div>
+                <ul class="bookmark-list" id="bookmark-list">
+                    <!-- Bookmark Items injected via JS -->
+                </ul>
+            </nav>
+        </aside>
+
+        <main class="main-container">
+            <header class="top-header">
+                <div class="header-titles">
+                    <h1>VoiceRead</h1>
+                    <p>AI Reading Assistant for Visually Impaired Learners</p>
+                </div>
+                <nav class="tab-nav inset-3d-soft">
+                    <button class="tab-btn active" data-tab="document">Document</button>
+                    <button class="tab-btn" data-tab="chat">Chat</button>
+                    <button class="tab-btn" data-tab="voice">Voice</button>
+                    <button class="tab-btn" data-tab="commands">Commands</button>
+                </nav>
+            </header>
+
+            <section class="content-area">
+                <!-- Tab Views -->
+                <div id="document-tab" class="tab-content active">
+                    <div class="document-search-bar inset-3d-soft">
+                        <input type="text" placeholder="Search in document..." id="doc-search">
+                        <button class="btn btn-primary" id="btn-search">Search</button>
+                        <button class="btn btn-ghost" id="btn-clear-search" style="display:none;">Clear</button>
+                    </div>
+
+                    <div id="search-results" class="search-results-card card-3d" style="display: none;">
+                        <div class="results-header" id="search-count">0 Results found</div>
+                        <ul class="results-list" id="search-list"></ul>
+                    </div>
+
+                    <div class="reader-area card-3d" id="reader-view">
+                        <div class="reader-header">
+                            <span class="page-indicator" id="reader-page-indicator">Page 0 of 0</span>
+                            <span class="file-badge" id="reader-badge">DOC</span>
+                        </div>
+                        <div class="reader-content">
+                            <h3 id="doc-label" style="color: var(--blue); margin-top: 0; margin-bottom: 12px;"></h3>
+                            <p id="doc-text">No document loaded. Please upload a file to begin reading.</p>
+                        </div>
+                        <div class="reader-actions">
+                            <button class="btn btn-success" id="btn-read-aloud">▶️ Read Aloud</button>
+                            <button class="btn btn-ghost" id="btn-stop-reading">⏹️ Stop</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="chat-tab" class="tab-content">
+                    <div class="chat-history scrollable" id="chat-messages">
+                        <div id="chat-empty-state" class="chat-empty">
+                            <div class="empty-icon-style">AI</div>
+                            <h3>AI Reading Assistant</h3>
+                            <div class="suggestion-chips">
+                                <button class="chip" data-query="Summarize key points">Summarize key points</button>
+                                <button class="chip" data-query="What is the main topic?">What is the main topic?</button>
+                                <button class="chip" data-query="Who are the key people?">Who are the key people?</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="chat-input-area inset-3d-soft">
+                        <input type="text" placeholder="Ask about the document..." id="chat-input" disabled>
+                        <button class="btn btn-primary" id="btn-send-chat" disabled>Send</button>
+                    </div>
+                </div>
+
+                <div id="voice-tab" class="tab-content">
+                    <div class="mic-center card-3d">
+                        <button class="mic-btn idle" id="main-mic-btn">
+                            <div class="mic-icon-visual" id="mic-emoji">🎤</div>
+                        </button>
+                        <p class="helper-text" id="mic-helper">Press Ctrl+M or click to start listening</p>
+                    </div>
+
+                    <!-- Type a command -->
+                    <div class="card-3d" style="margin-bottom: 24px; padding: 20px;">
+                        <div style="font-size: 1.1rem; font-weight: 500; margin-bottom: 12px;">⌨️ Type a Command</div>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" id="cmd-input" placeholder='e.g. "summarize" or "next page"' class="inset-3d-soft" style="flex:1; padding: 12px; border-radius: 8px; border: 1px solid var(--border); color: var(--text); background: transparent;">
+                            <button class="btn btn-primary" id="btn-send-cmd">▶ Run</button>
+                        </div>
+                    </div>
+
+                    <div class="quick-actions-grid" id="quick-actions">
+                        <button class="btn btn-secondary" data-cmd="read page">▶️ Read Page</button>
+                        <button class="btn btn-secondary" data-cmd="stop">⏹️ Stop</button>
+                        <button class="btn btn-secondary" data-cmd="summarize">✨ Summarize</button>
+                        <button class="btn btn-secondary" data-cmd="next page">▶ Next</button>
+                        <button class="btn btn-secondary" data-cmd="previous page">◀ Prev</button>
+                        <button class="btn btn-secondary" data-cmd="bookmark this">🔖 Bookmark</button>
+                        <button class="btn btn-secondary" data-cmd="go to bookmark">↩ Go BM</button>
+                        <button class="btn btn-secondary" data-cmd="help">❓ Help</button>
+                    </div>
+                </div>
+
+                <div id="commands-tab" class="tab-content">
+                    <div class="info-banner card-3d-mini">
+                        <p>Voice command dictionary for easy navigation.</p>
+                    </div>
+                    <div class="commands-table-container card-3d">
+                        <table class="commands-table">
+                            <thead>
+                                <tr>
+                                    <th>Command</th>
+                                    <th>Description</th>
+                                </tr>
+                            </thead>
+                            <tbody id="commands-table-body">
+                                <tr><td>"read document" / "read page"</td><td>Reads current page aloud</td></tr>
+                                <tr><td>"stop" / "pause"</td><td>Stops audio immediately</td></tr>
+                                <tr><td>"summarize"</td><td>Medium AI summary</td></tr>
+                                <tr><td>"brief summary"</td><td>Short 2-3 sentence summary</td></tr>
+                                <tr><td>"summarize in detail"</td><td>3-5 paragraph detailed summary</td></tr>
+                                <tr><td>"ask [question]"</td><td>Natural question to AI</td></tr>
+                                <tr><td>"next page" / "forward"</td><td>Go to next page</td></tr>
+                                <tr><td>"previous page" / "go back"</td><td>Go to previous page</td></tr>
+                                <tr><td>"go to page 5"</td><td>Jump to page 5</td></tr>
+                                <tr><td>"bookmark this"</td><td>Save current position</td></tr>
+                                <tr><td>"go to bookmark"</td><td>Return to last saved bookmark</td></tr>
+                                <tr><td>"help"</td><td>Reads all commands aloud</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <footer class="status-bar">
+                <span class="status-dot green" id="status-dot"></span>
+                <span class="status-text" id="status-text">Ready</span>
+            </footer>
+        </main>
+    </div>
+
+    <!-- Interactive JS App Logic -->
+    <script src="app.js"></script>
+</body>
+
+</html>

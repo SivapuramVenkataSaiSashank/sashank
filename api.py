@@ -13,9 +13,10 @@ import tempfile
 import base64
 import threading
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, Form
+from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
@@ -52,6 +53,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Serve vanilla frontend
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+@app.get("/")
+def serve_index():
+    return FileResponse("static/index.html")
 
 
 # ══════════════════════════════════════════════════════════
