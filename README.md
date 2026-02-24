@@ -1,6 +1,6 @@
-# VoiceRead — AI Reading Assistant for Blind Learners 🎙️📚
+# EchoVision — AI Reading Assistant for Blind Learners 🎙️📚
 
-> **HackxAmrita 2.0 Hackathon Project**  
+> **futureX Project**  
 > *Voice-activated AI summarization and reading assistant for blind learners*
 
 ---
@@ -40,7 +40,7 @@ Double-click run.bat
 ### Option 2: Manual
 ```bash
 # Clone / download the project
-cd "HackxAmrita 2.0"
+cd "futureX"
 
 # Create virtual environment
 python -m venv venv
@@ -104,7 +104,7 @@ The key is used only locally and never stored permanently.
 
 ## Project Structure
 ```
-HackxAmrita 2.0/
+futureX/
 ├── main.py               ← Entry point + Tkinter GUI
 ├── requirements.txt      ← Python dependencies
 ├── run.bat               ← One-click Windows launcher
@@ -139,4 +139,4 @@ Built by studying these open-source projects:
 
 ---
 
-*Made with ❤️ for HackxAmrita 2.0*
+*Made with ❤️ for futureX*

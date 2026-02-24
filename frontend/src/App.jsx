@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, Component } from 'react'
+import NetworkBackground from './NetworkBackground'
 
 // ══════════════════════════════════════════════════════════
 //  ERROR BOUNDARY — shows the error instead of blank screen
@@ -121,7 +122,7 @@ function Sidebar({ docState, setDocState, bookmarks, setBookmarks, apiReady, onS
     <aside className="sidebar">
       {/* Logo */}
       <div className="sidebar-logo">
-        <h2>🔊 VoiceRead</h2>
+        <h2>🔊 EchoVision</h2>
         <p>AI Reading Assistant</p>
       </div>
 
@@ -200,7 +201,7 @@ function Sidebar({ docState, setDocState, bookmarks, setBookmarks, apiReady, onS
       )}
 
       <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', marginTop: 'auto' }}>
-        <div style={{ fontSize: '0.72rem', color: 'var(--border2)', textAlign: 'center' }}>HackxAmrita 2.0 · VoiceRead</div>
+        <div style={{ fontSize: '0.72rem', color: 'var(--border2)', textAlign: 'center' }}>futureX · EchoVision</div>
       </div>
     </aside>
   )
@@ -247,15 +248,15 @@ function DocumentTab({ docState, setDocState, onStatus, onSpeak }) {
   }
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div>
       {/* Search bar */}
-      <div className="document-search-bar inset-3d-soft" style={{ marginBottom: '1.5rem', display: 'flex', gap: '0.8rem', padding: '0.5rem' }}>
-        <input type="text" placeholder="Search in document..." value={search}
+      <div className="row mb-12">
+        <input type="text" placeholder="🔍 Search document…" value={search}
           onChange={e => setSearch(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && doSearch()}
           style={{ flex: 1 }}
         />
-        <button className="btn btn-primary" onClick={doSearch} disabled={searching} style={{ minWidth: '100px' }}>
+        <button className="btn btn-secondary" onClick={doSearch} disabled={searching}>
           {searching ? <span className="spinner" /> : 'Search'}
         </button>
         {results.length > 0 && <button className="btn btn-ghost btn-sm" onClick={() => setResults([])}>Clear</button>}
@@ -263,32 +264,37 @@ function DocumentTab({ docState, setDocState, onStatus, onSpeak }) {
 
       {/* Search results */}
       {results.length > 0 && (
-        <div id="search-results" className="search-results-card card-3d">
-          <div className="results-header">3 Results found</div>
-          <ul className="results-list" style={{ listStyle: 'none', padding: 0 }}>
-            {results.slice(0, 8).map((r, i) => (
-              <li key={i} style={{ padding: '8px 12px', borderBottom: '1px solid var(--border-soft)', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-muted)' }}
-                onClick={() => jumpToResult(r.page)}>
-                <span style={{ color: 'var(--blue)', fontWeight: 600, marginRight: '10px' }}>p.{r.page + 1}</span> {(r.snippet ?? '').slice(0, 80)}…
-              </li>
-            ))}
-          </ul>
+        <div className="card card-sm mb-12">
+          <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: 8 }}>🔍 {results.length} results</div>
+          {results.slice(0, 8).map((r, i) => (
+            <div key={i} style={{ padding: '6px 10px', borderRadius: 6, background: 'var(--bg)', marginBottom: 4, cursor: 'pointer', fontSize: '0.82rem', color: 'var(--text-muted)' }}
+              onClick={() => jumpToResult(r.page)}>
+              <span style={{ color: 'var(--blue)', fontWeight: 600 }}>p.{r.page + 1}</span> — {(r.snippet ?? '').slice(0, 80)}…
+            </div>
+          ))}
         </div>
       )}
 
-      {/* Main Reader Content */}
-      <div className="reader-area card-3d" id="reader-view">
-        <div className="reader-header">
-          <span className="page-indicator">Page {docState.page + 1} of {docState.total}</span>
-          <span className="file-badge">{docState.ext.toUpperCase()}</span>
-        </div>
-        <div className="reader-content">
-          <p>{docState.text}</p>
-        </div>
-        <div className="reader-actions">
-          <button className="btn btn-success" onClick={() => onSpeak(docState.label + '. ' + docState.text)}>Read Aloud</button>
-          <button className="btn btn-ghost" onClick={() => onSpeak(null)}>Stop</button>
-        </div>
+      {/* Page badge */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+          Page <strong style={{ color: 'var(--blue)' }}>{docState.page + 1}</strong> of {docState.total}
+        </span>
+        <span style={{ fontSize: '0.78rem', background: 'var(--bg3)', border: '1px solid var(--border2)', padding: '3px 10px', borderRadius: 20, color: 'var(--text-muted)' }}>
+          {docState.ext}
+        </span>
+      </div>
+
+      {/* Text */}
+      <div className="doc-text-area">
+        <span className="page-label">{docState.label}</span>
+        {docState.text}
+      </div>
+
+      {/* Action row */}
+      <div className="row mt-12">
+        <button className="btn btn-success" onClick={() => onSpeak(docState.label + '. ' + docState.text)}>▶️ Read Aloud</button>
+        <button className="btn btn-ghost" onClick={() => onSpeak(null)}>⏹️ Stop</button>
       </div>
     </div>
   )
@@ -336,17 +342,17 @@ function ChatTab({ docState, apiReady, onStatus, onSpeak, chatHistory, setChatHi
   }
 
   return (
-    <div id="chat-tab" className="tab-content active" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Chat History */}
-      <div className="chat-history scrollable" id="chat-messages" style={{ flex: 1, overflowY: 'auto', paddingRight: 8, marginBottom: 16 }}>
+      <div style={{ flex: 1, overflowY: 'auto', paddingRight: 8, marginBottom: 16 }}>
         {chatHistory.length === 0 && (
-          <div className="chat-empty" style={{ marginTop: 40, textAlign: 'center' }}>
-            <div className="empty-icon-style" style={{ fontSize: '3rem', marginBottom: 20 }}>💬</div>
-            <h3>AI Reading Assistant</h3>
-            <p style={{ color: 'var(--text-muted)' }}>Ask questions or ask for a summary using your voice.</p>
-            <div className="suggestion-chips" style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'center', marginTop: 24 }}>
+          <div className="empty-state" style={{ marginTop: 40 }}>
+            <div className="es-icon">💬</div>
+            <h3>Chat with your Document</h3>
+            <p>Ask questions or ask for a summary using your voice.</p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center', marginTop: 16 }}>
               {SUGGESTIONS.map((s, i) => (
-                <button key={i} className="chip" onClick={() => askAI(s)}>{s}</button>
+                <button key={i} className="btn btn-ghost btn-sm" onClick={() => askAI(s)}>{s}</button>
               ))}
             </div>
           </div>
@@ -358,12 +364,22 @@ function ChatTab({ docState, apiReady, onStatus, onSpeak, chatHistory, setChatHi
             display: 'flex',
             justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start'
           }}>
-            <div className={`message ${msg.role === 'user' ? 'user' : 'ai'}`}>
+            <div style={{
+              maxWidth: '85%',
+              padding: '10px 14px',
+              borderRadius: msg.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+              background: msg.role === 'user' ? 'var(--blue)' : 'var(--bg-card)',
+              color: msg.role === 'user' ? 'inherit' : 'var(--text)',
+              border: msg.role === 'user' ? 'none' : '1px solid var(--border)',
+              lineHeight: 1.5,
+              fontSize: '0.92rem',
+              whiteSpace: 'pre-wrap'
+            }}>
               {msg.role === 'system' && <strong style={{ color: 'var(--orange)' }}>🤖 System: </strong>}
               {msg.content}
               {msg.role === 'assistant' && (
-                <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-                  <button className="btn btn-ghost btn-sm" style={{ padding: '4px 10px', fontSize: '0.8rem' }} onClick={() => onSpeak(msg.content)}>🔊 Read Aloud</button>
+                <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+                  <button className="btn btn-ghost btn-sm" style={{ padding: '2px 6px', fontSize: '0.8rem' }} onClick={() => onSpeak(msg.content)}>🔊 Read</button>
                 </div>
               )}
             </div>
@@ -371,8 +387,8 @@ function ChatTab({ docState, apiReady, onStatus, onSpeak, chatHistory, setChatHi
         ))}
         {aiLoading && (
           <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 16 }}>
-            <div className="message ai">
-              <span className="spinner" style={{ width: 14, height: 14, marginRight: 8, borderTopColor: 'var(--accent-blue)' }}></span> Thinking...
+            <div style={{ padding: '10px 14px', borderRadius: '18px 18px 18px 4px', background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+              <span className="spinner" style={{ width: 14, height: 14, marginRight: 8 }}></span> Thinking...
             </div>
           </div>
         )}
@@ -380,17 +396,19 @@ function ChatTab({ docState, apiReady, onStatus, onSpeak, chatHistory, setChatHi
       </div>
 
       {/* Input Area */}
-      <div className="chat-input-area inset-3d-soft" style={{ marginTop: 'auto' }}>
-        <input type="text" placeholder="Ask about the document..." id="chat-input"
-          value={question}
-          onChange={e => setQuestion(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && askAI()}
-          style={{ flex: 1, background: 'transparent', border: 'none', color: 'white', padding: '10px 15px', outline: 'none', width: '100%' }}
-          disabled={aiLoading}
-        />
-        <button className="btn btn-primary" onClick={() => askAI()} disabled={aiLoading || !question.trim()}>
-          {aiLoading ? <span className="spinner" style={{ width: 16, height: 16, borderTopColor: 'white' }} /> : 'Send'}
-        </button>
+      <div className="card" style={{ padding: '12px', marginTop: 'auto' }}>
+        <div className="row">
+          <input type="text" placeholder="Ask a question..."
+            value={question}
+            onChange={e => setQuestion(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && askAI()}
+            style={{ flex: 1 }}
+            disabled={aiLoading}
+          />
+          <button className="btn btn-primary" onClick={() => askAI()} disabled={aiLoading || !question.trim()}>
+            {aiLoading ? <span className="spinner" style={{ width: 16, height: 16 }} /> : 'Send'}
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -414,54 +432,49 @@ function VoiceTab({ docState, setDocState, setBookmarks, apiReady, onStatus, onS
   ]
 
   return (
-    <div id="voice-tab" className="tab-content active" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div>
       {/* Mic center */}
-      <div className="mic-center card-3d">
-        <button
-          className={`mic-btn ${micState === 'active' ? 'active' : 'idle'}`} id="main-mic-btn"
-          onClick={micState === 'idle' ? startListening : stopListening}
-          disabled={micState === 'loading'}
-        >
-          <div className="mic-icon-visual" style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '2.5rem',
-            opacity: micState === 'loading' ? 0.5 : 1
-          }}>
+      <div className="card" style={{ textAlign: 'center' }}>
+        <div className="mic-center">
+          <button
+            className={`mic-btn ${micState}`}
+            onClick={micState === 'idle' ? startListening : stopListening}
+            disabled={micState === 'loading'}
+          >
             {micState === 'active' ? '🎙️' : micState === 'loading' ? '⏳' : '🎤'}
+          </button>
+          <div className="mic-label">
+            {micState === 'idle' && 'Press Ctrl+M or click to listen'}
+            {micState === 'active' && '🔴 Listening… speak now'}
+            {micState === 'loading' && '⏳ Processing…'}
           </div>
-        </button>
-        <p className="helper-text">
-          {micState === 'idle' && 'Press Ctrl+M or click to start listening'}
-          {micState === 'active' && 'Listening... speak your command'}
-          {micState === 'loading' && 'Processing audio...'}
-        </p>
-      </div>
-
-      {/* Quick actions */}
-      <div className="quick-actions-grid" style={{ marginTop: '30px' }}>
-        {QUICK.slice(0, 4).map((q, i) => (
-          <button key={i} className="btn btn-secondary" onClick={q.fn}>{q.label}</button>
-        ))}
-      </div>
-      <div className="quick-actions-grid" style={{ marginTop: '15px' }}>
-        {QUICK.slice(4, 8).map((q, i) => (
-          <button key={i} className="btn btn-secondary" onClick={q.fn}>{q.label}</button>
-        ))}
+        </div>
       </div>
 
       {/* Type a command */}
-      <div className="card-3d" style={{ marginTop: 'auto', padding: '20px' }}>
-        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '10px' }}>⌨️ Or type a voice command directly:</p>
-        <div className="document-search-bar inset-3d-soft" style={{ display: 'flex', gap: '10px', padding: '5px' }}>
-          <input type="text" placeholder='e.g. "summarize" or "next page"'
+      <div className="card">
+        <div className="section-title mb-12">⌨️ Type a Command</div>
+        <div className="row">
+          <input type="text" placeholder='e.g. "summarize" or "next page" or "ask what is the main topic"'
             value={typedCmd} onChange={e => setTypedCmd(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && typedCmd.trim()) { dispatchCommand(typedCmd.trim()); setTypedCmd('') } }}
-            style={{ flex: 1, background: 'transparent', border: 'none', color: 'white', padding: '10px 15px', outline: 'none', width: '100%' }}
+            style={{ flex: 1 }}
           />
-          <button className="btn btn-primary" onClick={() => { if (typedCmd.trim()) { dispatchCommand(typedCmd.trim()); setTypedCmd('') } }}>Run</button>
+          <button className="btn btn-primary" onClick={() => { if (typedCmd.trim()) { dispatchCommand(typedCmd.trim()); setTypedCmd('') } }}>▶ Run</button>
         </div>
 
-        {!docState.loaded && <div className="info-banner card-3d-mini" style={{ marginTop: '15px' }}><p>📂 Upload a document from the sidebar to use most commands.</p></div>}
+        {!docState.loaded && <div className="alert alert-warn mt-12">📂 Upload a document from the sidebar first.</div>}
+        {!apiReady && <div className="alert alert-warn mt-12">🔑 Set GROQ_API_KEY in .env for AI features.</div>}
+      </div>
+
+      {/* Quick actions */}
+      <div className="card">
+        <div className="section-title mb-12">⚡ Quick Actions</div>
+        <div className="quick-grid">
+          {QUICK.map((q, i) => (
+            <button key={i} className="btn btn-secondary" onClick={q.fn}>{q.label}</button>
+          ))}
+        </div>
       </div>
     </div>
   )
@@ -512,56 +525,35 @@ function CommandsTab() {
   ]
 
   return (
-    <div id="commands-tab" className="tab-content active" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto' }}>
-      <div className="info-banner card-3d-mini" style={{ marginBottom: '20px' }}>
-        <p>🎙️ Speak commands after clicking the mic (Ctrl+M), or type them in the Voice tab.</p>
+    <div>
+      <div className="alert alert-info mb-12">
+        🎙️ Speak commands after clicking the mic, or type them in the Voice tab. Works in Chrome & Edge.
       </div>
 
-      <div className="commands-table-container card-3d" style={{ padding: '0' }}>
-        <table className="commands-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th style={{ textAlign: 'left', padding: '15px 20px', color: 'var(--text-muted)' }}>Category / Command</th>
-              <th style={{ textAlign: 'left', padding: '15px 20px', color: 'var(--text-muted)' }}>Description</th>
-            </tr>
-          </thead>
-          <tbody>
-            {groups.map((g, grpIdx) => (
-              <React.Fragment key={g.cat}>
-                <tr>
-                  <td colSpan="2" style={{ padding: '10px 20px', background: 'var(--bg-card)', color: 'var(--accent-blue)', fontWeight: 600, borderTop: grpIdx > 0 ? '1px solid var(--border-soft)' : 'none' }}>
-                    {g.cat}
-                  </td>
-                </tr>
-                {g.cmds.map(([key, desc], cmdIdx) => (
-                  <tr key={`${g.cat}-${cmdIdx}`} style={{ borderTop: '1px solid var(--border-soft)' }}>
-                    <td style={{ padding: '12px 20px', color: 'var(--text-primary)' }}><code>{key}</code></td>
-                    <td style={{ padding: '12px 20px', color: 'var(--text-muted)' }}>{desc}</td>
-                  </tr>
-                ))}
-              </React.Fragment>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="card-3d" style={{ marginTop: '20px', padding: '20px' }}>
-        <div style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '15px', color: 'var(--accent-blue)' }}>💡 Tips</div>
-        <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-          {[
-            '🔑 Put GROQ_API_KEY in .env — auto-loads on backend start.',
-            '🎙️ Voice uses your browser built-in Web Speech API (works in Chrome & Edge).',
-            '⌨️ Press Ctrl+M to toggle the microphone from anywhere in the app.',
-            '🗣️ Speak commands and see real-time transcription on screen.',
-            '📚 Supported formats: PDF, DOCX/DOC, EPUB, TXT',
-            '🔍 Full-text search in Document tab.',
-            '🔖 Bookmarks persist between sessions (saved in data/ folder).',
-          ].map((tip, i) => (
-            <li key={i} style={{ fontSize: '0.88rem', color: 'var(--text-muted)', marginBottom: '8px', paddingLeft: '15px', position: 'relative' }}>
-              <span style={{ position: 'absolute', left: 0, color: 'var(--accent-blue)' }}>•</span> {tip}
-            </li>
+      {groups.map(g => (
+        <div key={g.cat} className="cmd-group">
+          <div className="cmd-group-title">{g.cat}</div>
+          {g.cmds.map(([key, desc], i) => (
+            <div key={i} className="cmd-row">
+              <span className="cmd-key">{key}</span>
+              <span className="cmd-desc">{desc}</span>
+            </div>
           ))}
-        </ul>
+        </div>
+      ))}
+
+      <div className="card" style={{ marginTop: 16 }}>
+        <div className="section-title mb-12">💡 Tips</div>
+        {[
+          '🔑 Put GROQ_API_KEY in .env — auto-loads on backend start.',
+          '🎙️ Voice uses your browser built-in Web Speech API (works in Chrome & Edge).',
+          '⌨️ Press Ctrl+M to toggle the microphone from anywhere in the app.',
+          '🗣️ Speak commands and see real-time transcription on screen.',
+          '📚 Supported formats: PDF, DOCX/DOC, EPUB, TXT',
+          '🔍 Full-text search in Document tab.',
+          '🔖 Bookmarks persist between sessions (saved in data/ folder).',
+          '📤 Export AI output via the "Export" button in the AI tab.',
+        ].map((tip, i) => <p key={i} style={{ fontSize: '0.88rem', color: 'var(--text-muted)', marginBottom: 6 }}>• {tip}</p>)}
       </div>
     </div>
   )
@@ -903,7 +895,7 @@ function AppInner() {
     return (
       <div className="app-shell" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ textAlign: 'center', padding: '50px 40px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '16px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}>
-          <h1 style={{ fontSize: '3rem', marginBottom: '20px' }}>🔊 VoiceRead</h1>
+          <h1 style={{ fontSize: '3rem', marginBottom: '20px', background: 'linear-gradient(90deg, #9b61d4, #6e56cf)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>🔊 EchoVision</h1>
           <p style={{ color: 'var(--text-muted)', fontSize: '1.2rem' }}>Press any key on your keyboard to start</p>
         </div>
       </div>
@@ -911,55 +903,64 @@ function AppInner() {
   }
 
   return (
-    <div id="app-shell" className="view active">
+    <div className="app-shell">
+      <NetworkBackground />
       {micState !== 'idle' && (
-        <div id="voice-hud" className="hud-container" style={{ position: 'fixed', bottom: '30px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000 }}>
-          <div className="hud-pill card-3d pulsing" style={{ padding: '15px 30px', borderRadius: '50px', display: 'flex', gap: '15px', alignItems: 'center' }}>
-            {micState === 'active' ? <div className="mic-active" style={{ width: 16, height: 16, background: 'var(--accent-blue)', borderRadius: '50%' }}></div> : <span className="spinner" style={{ width: 16, height: 16, borderTopColor: 'var(--accent-blue)' }}></span>}
-            <div style={{ flex: 1 }}>
-              <span className="hud-status" style={{ color: 'var(--accent-blue)', fontWeight: 600 }}>
-                {micState === 'active' ? 'Listening...' : 'Processing...'}
-              </span>
-              {liveTranscript && <span id="transcription" className="hud-transcription" style={{ color: 'var(--text-primary)', marginLeft: 10 }}>{liveTranscript}</span>}
+        <div style={{
+          position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)',
+          background: micState === 'active' ? 'rgba(76, 175, 80, 0.95)' : 'rgba(33, 150, 243, 0.95)',
+          color: 'white', padding: '16px 32px', borderRadius: '30px',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.4)', zIndex: 9999,
+          display: 'flex', alignItems: 'center', gap: '12px', minWidth: '300px',
+          pointerEvents: 'none', transition: 'all 0.3s ease'
+        }}>
+          {micState === 'active' ? <div className="mic-active" style={{ width: 16, height: 16, background: 'white' }}></div> : <span className="spinner" style={{ width: 16, height: 16, borderTopColor: 'white' }}></span>}
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: '0.85rem', fontWeight: 600, opacity: 0.9, textTransform: 'uppercase', letterSpacing: '1px' }}>
+              {micState === 'active' ? 'Listening...' : 'Processing...'}
             </div>
+            {liveTranscript && <div style={{ fontSize: '1.2rem', fontWeight: 500, marginTop: '4px' }}>{liveTranscript}</div>}
           </div>
         </div>
       )}
 
       <Sidebar {...sharedProps} />
 
-      <main className="main-container">
+      <div className="main-area">
         {/* Header */}
         <header className="top-header">
-          <div className="header-titles">
-            <h1>VoiceRead</h1>
-            <p>AI Reading Assistant for Visually Impaired Learners</p>
+          <div>
+            <h1>🔊 EchoVision</h1>
+            <p>Voice-Activated AI Reading Assistant for Blind Learners</p>
           </div>
-          <nav className="tab-nav inset-3d-soft">
-            {TABS.map(t => (
-              <button key={t.id} className={`tab-btn ${activeTab === t.id ? 'active' : ''}`} onClick={() => setActiveTab(t.id)}>
-                {t.label}
-              </button>
-            ))}
-          </nav>
+          <div style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)' }}>futureX</div>
         </header>
 
+        {/* Tabs */}
+        <div className="tabs-bar">
+          {TABS.map(t => (
+            <button key={t.id} className={`tab-btn ${activeTab === t.id ? 'active' : ''}`} onClick={() => setActiveTab(t.id)}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
         {/* Content */}
-        <section className="content-area" style={{ flex: 1, overflowY: 'auto' }}>
-          {activeTab === 'doc' && <div className="tab-content active"><DocumentTab {...sharedProps} /></div>}
-          {activeTab === 'chat' && <div className="tab-content active"><ChatTab {...sharedProps} {...chatProps} /></div>}
-          {activeTab === 'voice' && <div className="tab-content active"><VoiceTab {...sharedProps} /></div>}
-          {activeTab === 'commands' && <div className="tab-content active"><CommandsTab /></div>}
-        </section>
+        <div className="tab-content" style={{ display: 'flex', flexDirection: 'column' }}>
+          {activeTab === 'doc' && <DocumentTab {...sharedProps} />}
+          {activeTab === 'chat' && <ChatTab       {...sharedProps} {...chatProps} />}
+          {activeTab === 'voice' && <VoiceTab    {...sharedProps} />}
+          {activeTab === 'commands' && <CommandsTab />}
+        </div>
 
         {/* Status bar */}
-        <footer className="status-bar">
-          <span className={`status-dot ${status.type === 'ok' ? 'green' : 'red'}`} style={{ backgroundColor: status.type === 'ok' ? 'var(--accent-green)' : 'var(--accent-red)' }} />
-          <span className="status-text" style={{ color: 'var(--text-muted)' }}>
+        <div className="status-bar">
+          <span className={`status-dot ${status.type}`} />
+          <span style={{ color: status.type === 'error' ? 'var(--red)' : status.type === 'ok' ? 'var(--green)' : status.type === 'warn' ? 'var(--orange)' : 'var(--text-muted)' }}>
             {status.msg || 'Ready — upload a document to get started'}
           </span>
-        </footer>
-      </main>
+        </div>
+      </div>
     </div>
   )
 }

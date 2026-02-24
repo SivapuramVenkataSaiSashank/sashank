@@ -1,5 +1,5 @@
 """
-api.py  — FastAPI backend for VoiceRead
+api.py  — FastAPI backend for EchoVision
 Serves the React frontend via REST endpoints.
 API key loaded from .env (GEMINI_API_KEY).
 """
@@ -13,10 +13,9 @@ import tempfile
 import base64
 import threading
 
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
@@ -45,7 +44,7 @@ if GROQ_API_KEY and GROQ_API_KEY != "your_groq_api_key_here":
     ai.set_api_key(GROQ_API_KEY)
 
 # ██████  App  ████████████████████████████████████████████
-app = FastAPI(title="VoiceRead API", version="2.0")
+app = FastAPI(title="EchoVision API", version="2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -53,13 +52,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Serve vanilla frontend
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-@app.get("/")
-def serve_index():
-    return FileResponse("static/index.html")
 
 
 # ══════════════════════════════════════════════════════════
@@ -308,7 +300,7 @@ def warm_up_tts():
     model = get_tts()
     # Generate the common phrases to pre-warm the model and populate the cache
     phrases = [
-        "Welcome to Voice Read. Please upload a document to begin.",
+        "Welcome to EchoVision. Please upload a document to begin.",
         "Okay, cancelled. Please try asking again.",
         "I didn't catch that. Please say yes to proceed, or no to cancel."
     ]
