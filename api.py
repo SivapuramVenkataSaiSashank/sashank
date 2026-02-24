@@ -368,6 +368,16 @@ def command(body: CommandBody):
     global session_state
     c = body.text.lower().strip()
 
+    # 🌟 HIGHEST PRIORITY OVERRIDE: OS File Picker
+    if any(k in c for k in ["open other file", "browse computer", "browse folders", "open different file", "open another file", "another file"]):
+        session_state["awaiting_file"] = False
+        import subprocess
+        try:
+            subprocess.Popen(["cmd.exe", "/c", "start", "narrator"])
+        except Exception:
+            pass
+        return {"action": "open_file_dialog", "message": "Opening computer file browser...", "tts_text": "Opening your computer's file browser. Please use your screen reader to select a file."}
+
     def page_state():
         return {
             "page":  doc.current_page,
@@ -399,14 +409,7 @@ def command(body: CommandBody):
             session_state["awaiting_file"] = False
             return {"action": "speak", "message": "Cancelled file selection.", "tts_text": "Okay, cancelled."}
 
-        if any(k in c for k in ["open other file", "browse computer", "browse folders", "open different file"]):
-            session_state["awaiting_file"] = False
-            import subprocess
-            try:
-                subprocess.Popen(["cmd.exe", "/c", "start", "narrator"])
-            except Exception:
-                pass
-            return {"action": "open_file_dialog", "message": "Opening computer file browser...", "tts_text": "Opening your computer's file browser. Please use your screen reader to select a file."}
+
 
         # Handling "next" pagination
         if any(k in c for k in ["next", "more", "continue", "next page"]):
@@ -503,14 +506,7 @@ def command(body: CommandBody):
         
         return {"action": "speak", "message": f"Listening for file selection (1-{len(found_files)})...", "tts_text": " ".join(tts_parts)}
 
-    # Triggering the native OS File Manager popup for everything else
-    if any(k in c for k in ["open other file", "browse computer", "browse folders", "open different file"]):
-        import subprocess
-        try:
-            subprocess.Popen(["narrator"])
-        except Exception:
-            pass
-        return {"action": "open_file_dialog", "message": "Opening computer file browser...", "tts_text": "Opening your computer's file browser. Please use your screen reader to select a file."}
+
 
     if not doc.page_count():
         return {"action":"error","message":"No document loaded."}
