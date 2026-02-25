@@ -143,46 +143,70 @@ def get_filename_from_gemini(query: str) -> str:
 #  DOCUMENT UPLOAD & DELETION
 # ══════════════════════════════════════════════════════════
 @app.post("/api/upload")
-async def upload_file(file: UploadFile = File(...)):
+async def upload_file(files: list[UploadFile] = File(...), append: bool = Form(False)):
     import subprocess
     try:
         subprocess.run(["taskkill", "/IM", "narrator.exe", "/F"], capture_output=True)
     except Exception:
         pass
         
-    ext = os.path.splitext(file.filename)[1].lower()
-    if ext not in (".pdf", ".docx", ".doc", ".epub", ".txt"):
-        raise HTTPException(400, detail=f"Unsupported file type: {ext}")
+    for i, file in enumerate(files):
+        ext = os.path.splitext(file.filename)[1].lower()
+        if ext not in (".pdf", ".docx", ".doc", ".epub", ".txt"):
+            continue # Skip unsupported
 
-    # Save to temp file
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
-    tmp.write(await file.read())
-    tmp.close()
+        # Save to temp file
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
+        tmp.write(await file.read())
+        tmp.close()
 
-    ok = doc.load(tmp.name)
-    if not ok:
-        raise HTTPException(500, detail="Could not parse document.")
+        should_append = append or (i > 0)
+        ok = doc.load(tmp.name, append=should_append)
+        if ok:
+            bm.set_document(tmp.name)
 
-    bm.set_document(tmp.name)
+    if not doc.page_count():
+         raise HTTPException(400, detail="No valid documents were loaded.")
 
     return {
         "ok":          True,
         "title":       str(doc.title or "Untitled"),
         "doc_type":    str(doc.doc_type or "doc"),
         "page_count":  doc.page_count(),
-        "current_page": 0,
+        "current_page": doc.current_page,
         "label":       str(doc.get_current_label() or "Page 1"),
         "text":        str(doc.get_current_text() or ""),
+        "files":       doc.loaded_files,
     }
 
-@app.delete("/api/document")
-def delete_document():
+@app.delete("/api/document/all")
+def delete_all_documents():
     if not doc.page_count():
          raise HTTPException(400, detail="No document loaded.")
     ok = doc.unload(delete_file=True)
     if not ok:
-         raise HTTPException(500, detail="Could not delete document.")
-    return {"ok": True, "message": "Document deleted successfully."}
+         raise HTTPException(500, detail="Could not delete documents.")
+    return {"ok": True, "message": "All documents deleted."}
+
+@app.delete("/api/document/{file_id}")
+def delete_document(file_id: int):
+    if not doc.page_count():
+         raise HTTPException(400, detail="No document loaded.")
+    ok = doc.remove_file(file_id, delete_file=True)
+    if not ok:
+         raise HTTPException(500, detail="Could not delete file or file not found.")
+    
+    return {
+        "ok":          True,
+        "title":       str(doc.title or "Untitled"),
+        "doc_type":    str(doc.doc_type or "doc"),
+        "page_count":  doc.page_count(),
+        "current_page": doc.current_page,
+        "label":       str(doc.get_current_label() or "Page 1"),
+        "text":        str(doc.get_current_text() or ""),
+        "files":       doc.loaded_files,
+        "message":     "File deleted successfully."
+    }
 
 
 # ══════════════════════════════════════════════════════════
@@ -198,6 +222,7 @@ def get_page(n: int):
         "total": doc.page_count(),
         "label": str(doc.get_current_label() or ""),
         "text":  str(doc.get_current_text() or ""),
+        "files": doc.loaded_files,
     }
 
 
@@ -222,6 +247,7 @@ def navigate(body: NavigateBody):
         "total": doc.page_count(),
         "label": str(doc.get_current_label() or ""),
         "text":  str(doc.get_current_text() or ""),
+        "files": doc.loaded_files,
     }
 
 
@@ -454,9 +480,47 @@ def command(body: CommandBody):
             session_state["awaiting_file"] = False
             return {"action": "speak", "message": "Cancelled file selection.", "tts_text": "Okay, cancelled."}
 
+    # DELETE SPECIFIC FILE COMMAND
+    if any(k in c for k in ["delete file", "remove file", "delete document", "remove document", "delete the file"]):
+        if not doc.loaded_files:
+            return {"action": "speak", "message": "No files are currently loaded.", "tts_text": "There are no files loaded."}
+            
+        # Try to find which file to delete by name Match
+        target_file = None
+        for f in doc.loaded_files:
+            clean_name = f['name'].lower().replace(".pdf","").replace(".docx","").replace(".txt","").replace(".epub","")
+            if clean_name in c:
+                target_file = f
+                break
+                
+        # Or if there's only one file it might mean that one
+        if not target_file and len(doc.loaded_files) == 1:
+            target_file = doc.loaded_files[0]
+            
+        if target_file:
+            doc.remove_file(target_file["id"], delete_file=True)
+            if not doc.loaded_files:
+                return {
+                    "action": "document_deleted",
+                    "message": f"Deleted {target_file['name']}. No files remaining.",
+                    "tts_text": f"I have removed {target_file['name']}. There are no files left."
+                }
+            else:
+                return {
+                    "action": "file_loaded",  # Re-use file_loaded action to refresh UI
+                    "title": str(doc.title),
+                    "ext": str(doc.doc_type),
+                    "message": f"Deleted {target_file['name']}.",
+                    "tts_text": f"I have removed {target_file['name']}.",
+                    **page_state(),
+                    "files": doc.loaded_files
+                }
+        else:
+            return {"action": "speak", "message": "Could not determine which file to delete.", "tts_text": "I'm not sure which file you want to delete. Please say the file name clearly."}
 
-
-        # Handling "next" pagination
+    if session_state.get("awaiting_file"):
+        files = session_state["files"]
+        offset = session_state.get("files_offset", 0)
         if any(k in c for k in ["next", "more", "continue", "next page"]):
             new_offset = offset + 5
             if new_offset >= len(files):

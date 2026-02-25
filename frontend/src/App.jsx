@@ -59,10 +59,11 @@ function Sidebar({ docState, setDocState, bookmarks, setBookmarks, apiReady, onS
   const [uploading, setUploading] = useState(false)
   const [jumping, setJumping] = useState(docState.page + 1)
 
-  async function handleUpload(file) {
-    if (!file) return
+  async function handleUpload(files) {
+    if (!files || files.length === 0) return
     const fd = new FormData()
-    fd.append('file', file)
+    Array.from(files).forEach(f => fd.append('files', f))
+    fd.append('append', docState.loaded ? 'true' : 'false')
     setUploading(true)
     try {
       const data = await fetch(API + '/upload', { method: 'POST', body: fd })
@@ -72,13 +73,14 @@ function Sidebar({ docState, setDocState, bookmarks, setBookmarks, apiReady, onS
         total: data.page_count ?? 1,
         label: data.label ?? 'Page 1',
         text: data.text ?? '',
-        title: data.title ?? file.name,
+        title: data.title,
         ext: data.doc_type ?? 'doc',
+        files: data.files || []
       })
       setJumping(1)
       setBookmarks([])
-      onStatus('✅ Loaded: ' + (data.title ?? file.name), 'ok')
-      onSpeak('File uploaded successfully. Proceed.')
+      onStatus('✅ Loaded: ' + data.title, 'ok')
+      onSpeak('Files uploaded successfully. Proceed.')
       setActiveTab('chat')
     } catch (e) {
       onStatus('❌ ' + e.message, 'error')
@@ -118,6 +120,30 @@ function Sidebar({ docState, setDocState, bookmarks, setBookmarks, apiReady, onS
     await navigate('goto', page)
   }
 
+  async function deleteFile(fileId, e) {
+    if (e) e.stopPropagation();
+    if (confirm("Are you sure you want to remove this specific file from the session?")) {
+      try {
+        const data = await api(`/document/${fileId}`, { method: 'DELETE' });
+        setDocState(s => ({
+          ...s,
+          loaded: data.page_count > 0,
+          page: data.current_page,
+          total: data.page_count,
+          label: data.label,
+          text: data.text,
+          title: data.title,
+          ext: data.doc_type,
+          files: data.files || [],
+        }));
+        if (data.page_count === 0) setBookmarks([]);
+        onStatus(data.message || '🗑️ File removed.', 'ok');
+      } catch (err) {
+        onStatus('❌ ' + err.message, 'error');
+      }
+    }
+  }
+
   return (
     <aside className="sidebar">
       {/* Logo */}
@@ -141,11 +167,11 @@ function Sidebar({ docState, setDocState, bookmarks, setBookmarks, apiReady, onS
           onClick={() => fileRef.current?.click()}
           onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('drag') }}
           onDragLeave={e => e.currentTarget.classList.remove('drag')}
-          onDrop={e => { e.preventDefault(); e.currentTarget.classList.remove('drag'); handleUpload(e.dataTransfer.files[0]) }}
+          onDrop={e => { e.preventDefault(); e.currentTarget.classList.remove('drag'); handleUpload(e.dataTransfer.files) }}
         >
           <div className="dz-icon">{uploading ? '⏳' : '📄'}</div>
-          <div className="dz-text">{uploading ? 'Loading…' : 'Click or drag PDF / DOCX / EPUB / TXT'}</div>
-          <input ref={fileRef} type="file" accept=".pdf,.docx,.doc,.epub,.txt" onChange={e => handleUpload(e.target.files[0])} />
+          <div className="dz-text">{uploading ? 'Loading…' : 'Click or drag PDF / DOCX / EPUB / TXT (Multiple allowed)'}</div>
+          <input ref={fileRef} type="file" multiple accept=".pdf,.docx,.doc,.epub,.txt" onChange={e => handleUpload(e.target.files)} />
         </div>
       </div>
 
@@ -158,6 +184,22 @@ function Sidebar({ docState, setDocState, bookmarks, setBookmarks, apiReady, onS
               <div className="doc-info-title">{docState.title}</div>
               <div className="doc-info-meta">{docState.ext} · {docState.total} pages</div>
             </div>
+
+            {docState.files && docState.files.length > 0 && (
+              <div style={{ marginTop: 8, marginBottom: 16 }}>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: 4 }}>Loaded Files:</div>
+                {docState.files.map(f => (
+                  <div key={f.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg)', padding: '4px 8px', borderRadius: 4, marginBottom: 4, fontSize: '0.82rem' }}>
+                    <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px' }} title={f.name}>{f.name}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{f.page_count}p</span>
+                      <button className="btn btn-ghost btn-danger btn-sm" style={{ padding: '2px 4px', fontSize: '0.9rem' }} onClick={(e) => deleteFile(f.id, e)}>🗑️</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="metrics">
               <div className="metric-pill"><div className="val">{docState.page + 1}</div><div className="lbl">Page</div></div>
               <div className="metric-pill"><div className="val">{docState.total}</div><div className="lbl">Total</div></div>
@@ -181,18 +223,18 @@ function Sidebar({ docState, setDocState, bookmarks, setBookmarks, apiReady, onS
 
             <div className="row mb-8">
               <button className="btn btn-danger btn-sm" style={{ flex: 1 }} onClick={async () => {
-                if (confirm("Are you sure you want to delete this document?")) {
+                if (confirm("Are you sure you want to delete ALL loaded documents?")) {
                   try {
-                    await api('/document', { method: 'DELETE' });
-                    setDocState({ loaded: false, page: 0, total: 0, label: '', text: '', title: '', ext: '' });
+                    await api('/document/all', { method: 'DELETE' });
+                    setDocState({ loaded: false, page: 0, total: 0, label: '', text: '', title: '', ext: '', files: [] });
                     setBookmarks([]);
-                    onStatus('🗑️ Document deleted.', 'ok');
+                    onStatus('🗑️ All documents deleted.', 'ok');
                     setActiveTab('doc');
                   } catch (e) {
                     onStatus('❌ ' + e.message, 'error');
                   }
                 }
-              }}>🗑️ Delete File</button>
+              }}>🗑️ Delete All</button>
             </div>
           </div>
 
@@ -599,6 +641,9 @@ function AppInner() {
   const [aiLoading, setAiLoading] = useState(false)
   const [pendingVoiceFiles, setPendingVoiceFiles] = useState(null)
 
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false)
+  const currentTtsRun = useRef(0)
+
   const audioRef = useRef(null)
 
   // Check API status on load
@@ -736,6 +781,7 @@ function AppInner() {
       // For progressive TTS
       let spokenTextLength = 0
       let ttsQueue = Promise.resolve()
+      const myTtsRun = currentTtsRun.current
 
       while (true) {
         const { done, value } = await reader.read()
@@ -745,15 +791,17 @@ function AppInner() {
           if (remainingText.length > 0) {
             const audioBlobPromise = apiBlob('/tts', { text: remainingText }).then(blob => URL.createObjectURL(blob)).catch(() => null)
             ttsQueue = ttsQueue.then(async () => {
+              if (myTtsRun !== currentTtsRun.current) return
               const url = await audioBlobPromise
-              if (!url) return
+              if (!url || myTtsRun !== currentTtsRun.current) return
               return new Promise(resolve => {
                 if (audioRef.current) audioRef.current.pause()
                 const audio = new Audio(url)
                 audioRef.current = audio
-                audio.onended = resolve
-                audio.onerror = resolve
-                audio.play().catch(resolve)
+                setIsPlayingAudio(true)
+                audio.onended = () => { setIsPlayingAudio(false); resolve() }
+                audio.onerror = () => { setIsPlayingAudio(false); resolve() }
+                audio.play().catch(() => { setIsPlayingAudio(false); resolve() })
               })
             })
           }
@@ -772,15 +820,17 @@ function AppInner() {
           if (sentenceToSpeak.length > 0) {
             const audioBlobPromise = apiBlob('/tts', { text: sentenceToSpeak }).then(blob => URL.createObjectURL(blob)).catch(() => null)
             ttsQueue = ttsQueue.then(async () => {
+              if (myTtsRun !== currentTtsRun.current) return
               const url = await audioBlobPromise
-              if (!url) return
+              if (!url || myTtsRun !== currentTtsRun.current) return
               return new Promise(resolve => {
                 if (audioRef.current) audioRef.current.pause()
                 const audio = new Audio(url)
                 audioRef.current = audio
-                audio.onended = resolve
-                audio.onerror = resolve
-                audio.play().catch(resolve)
+                setIsPlayingAudio(true)
+                audio.onended = () => { setIsPlayingAudio(false); resolve() }
+                audio.onerror = () => { setIsPlayingAudio(false); resolve() }
+                audio.play().catch(() => { setIsPlayingAudio(false); resolve() })
               })
             })
           }
@@ -859,9 +909,14 @@ function AppInner() {
     setMicState('idle')
   }
 
-  // Ctrl+M global shortcut
+  // Global keystroke listener to stop TTS and Ctrl+M for mic
   useEffect(() => {
     function handleKeyDown(e) {
+      if (isPlayingAudio && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        // If they type in an input field, still stop reading
+        handleSpeak(null)
+      }
+
       // Toggle mic with Ctrl+M
       if (e.ctrlKey && e.key.toLowerCase() === 'm') {
         e.preventDefault()
@@ -879,28 +934,34 @@ function AppInner() {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [])
+  }, [isPlayingAudio])
 
   function showStatus(msg, type = 'info') { setStatus(msg, type) }
 
   function handleSpeak(text) {
     return new Promise(async (resolve, reject) => {
+      currentTtsRun.current += 1
       if (!text) {
         if (audioRef.current) { audioRef.current.pause(); audioRef.current = null }
+        setIsPlayingAudio(false)
         resolve()
         return
       }
+      const myRun = currentTtsRun.current
       try {
+        setIsPlayingAudio(true)
         const blob = await apiBlob('/tts', { text })
         const url = URL.createObjectURL(blob)
+        if (myRun !== currentTtsRun.current) return resolve()
         if (audioRef.current) audioRef.current.pause()
         const audio = new Audio(url)
         audioRef.current = audio
-        audio.onended = () => resolve()
-        audio.onerror = (e) => reject(e)
-        audio.play()
+        audio.onended = () => { setIsPlayingAudio(false); resolve() }
+        audio.onerror = (e) => { setIsPlayingAudio(false); reject(e) }
+        audio.play().catch(e => { setIsPlayingAudio(false); resolve() })
       } catch (e) {
         showStatus('❌ TTS error: ' + e.message, 'error')
+        setIsPlayingAudio(false)
         resolve() // resolve anyway to avoid hanging
       }
     })
@@ -1024,11 +1085,16 @@ function AppInner() {
         </div>
 
         {/* Status bar */}
-        <div className="status-bar">
+        <div className="status-bar" style={{ display: 'flex', alignItems: 'center' }}>
           <span className={`status-dot ${status.type}`} />
-          <span style={{ color: status.type === 'error' ? 'var(--red)' : status.type === 'ok' ? 'var(--green)' : status.type === 'warn' ? 'var(--orange)' : 'var(--text-muted)' }}>
+          <span style={{ color: status.type === 'error' ? 'var(--red)' : status.type === 'ok' ? 'var(--green)' : status.type === 'warn' ? 'var(--orange)' : 'var(--text-muted)', flex: 1 }}>
             {status.msg || 'Ready — upload a document to get started'}
           </span>
+          {isPlayingAudio && (
+            <button className="btn btn-danger btn-sm" style={{ marginLeft: 'auto' }} onClick={() => handleSpeak(null)}>
+              ⏹️ Stop Reading
+            </button>
+          )}
         </div>
       </div>
     </div>

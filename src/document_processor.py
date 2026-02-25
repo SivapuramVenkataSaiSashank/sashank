@@ -11,7 +11,10 @@ from chromadb.utils import embedding_functions
 
 class DocumentProcessor:
     def __init__(self):
-        self.pages = []          # list of {"index": int, "text": str, "label": str}
+        self.pages = []          # list of {"index": int, "text": str, "label": str, "file_id": int}
+        self.loaded_files = []   # list of {"id": int, "path": str, "name": str, "type": str, "page_count": int}
+        self.next_file_id = 1
+        
         self.current_page = 0
         self.file_path = None
         self.doc_type = None
@@ -26,29 +29,53 @@ class DocumentProcessor:
 
     # ─────────────────────────── Public API ───────────────────────────
 
-    def load(self, filepath: str) -> bool:
-        """Load a document and return True on success."""
+    def load(self, filepath: str, append: bool = False) -> bool:
+        """Load a document and return True on success. If append is True, add to existing pages."""
         ext = os.path.splitext(filepath)[1].lower()
-        self.pages = []
-        self.current_page = 0
-        self.file_path = filepath
-        self.title = os.path.basename(filepath)
+        new_title = os.path.basename(filepath)
+        
+        if not append:
+            self.pages = []
+            self.loaded_files = []
+            self.current_page = 0
+            self.file_path = filepath
+            self.title = new_title
+        else:
+            if self.title != "Untitled Document" and len(self.loaded_files) > 0:
+                # Instead of appending indefinitely, "Multiple Files (N)" is cleaner if > 1
+                self.title = f"Multiple Files ({len(self.loaded_files) + 1})"
+            else:
+                self.title = new_title
+
+        current_file_id = self.next_file_id
+        self.next_file_id += 1
+        start_pages_len = len(self.pages)
 
         try:
             if ext == ".pdf":
-                self._load_pdf(filepath)
-                self.doc_type = "PDF"
+                self._load_pdf(filepath, current_file_id)
+                self.doc_type = "PDF" if not append else "Mixed"
             elif ext in (".docx", ".doc"):
-                self._load_docx(filepath)
-                self.doc_type = "DOCX"
+                self._load_docx(filepath, current_file_id)
+                self.doc_type = "DOCX" if not append else "Mixed"
             elif ext == ".epub":
-                self._load_epub(filepath)
-                self.doc_type = "EPUB"
+                self._load_epub(filepath, current_file_id)
+                self.doc_type = "EPUB" if not append else "Mixed"
             elif ext == ".txt":
-                self._load_txt(filepath)
-                self.doc_type = "TXT"
+                self._load_txt(filepath, current_file_id)
+                self.doc_type = "TXT" if not append else "Mixed"
             else:
                 return False
+                
+            # Record file metadata
+            pages_added = len(self.pages) - start_pages_len
+            self.loaded_files.append({
+                "id": current_file_id,
+                "path": filepath,
+                "name": new_title,
+                "type": ext.upper().replace('.', ''),
+                "page_count": pages_added
+            })
                 
             if len(self.pages) > 0:
                 self._build_vector_index()
@@ -61,11 +88,12 @@ class DocumentProcessor:
     def unload(self, delete_file: bool = False) -> bool:
         """Clear document from memory and optionally delete the file from disk."""
         try:
-            if delete_file and self.file_path and os.path.isfile(self.file_path):
-                try:
-                    os.remove(self.file_path)
-                except Exception as e:
-                    print(f"Could not delete file {self.file_path}: {e}")
+            if delete_file:
+                for f in self.loaded_files:
+                    path = f["path"]
+                    if path and os.path.isfile(path):
+                        try: os.remove(path)
+                        except Exception as e: print(f"Could not delete {path}: {e}")
 
             if self.collection:
                 try:
@@ -75,6 +103,7 @@ class DocumentProcessor:
                     pass
 
             self.pages = []
+            self.loaded_files = []
             self.current_page = 0
             self.file_path = None
             self.doc_type = None
@@ -83,6 +112,46 @@ class DocumentProcessor:
         except Exception as e:
             print(f"[DocumentProcessor] Unload error: {e}")
             return False
+
+    def remove_file(self, file_id: int, delete_file: bool = True) -> bool:
+        """Remove a specific file from the loaded batch."""
+        target_file = next((f for f in self.loaded_files if f["id"] == file_id), None)
+        if not target_file: return False
+
+        # If it's the last file, just full unload
+        if len(self.loaded_files) == 1:
+            return self.unload(delete_file=delete_file)
+
+        # Remove physical file
+        if delete_file and target_file["path"] and os.path.isfile(target_file["path"]):
+            try: os.remove(target_file["path"])
+            except Exception as e: print(f"Could not delete {target_file['path']}: {e}")
+
+        # Remove from state
+        self.loaded_files = [f for f in self.loaded_files if f["id"] != file_id]
+        
+        # Filter pages
+        self.pages = [p for p in self.pages if p.get("file_id") != file_id]
+        
+        # Reset current page if out of bounds
+        if self.current_page >= len(self.pages):
+            self.current_page = max(0, len(self.pages) - 1)
+            
+        # Re-index remaining pages
+        for i, p in enumerate(self.pages):
+            p["index"] = i
+
+        # Rebuild title
+        if len(self.loaded_files) == 1:
+            self.title = self.loaded_files[0]["name"]
+            self.doc_type = self.loaded_files[0]["type"]
+        else:
+            self.title = f"Multiple Files ({len(self.loaded_files)})"
+            self.doc_type = "Mixed"
+            
+        # Rebuild vector index
+        self._build_vector_index()
+        return True
 
     def page_count(self) -> int:
         return len(self.pages)
@@ -216,26 +285,29 @@ class DocumentProcessor:
             print(f"[DocumentProcessor] Error bulding vector index: {e}")
             self.collection = None
 
-    def _load_pdf(self, filepath: str):
+    def _load_pdf(self, filepath: str, file_id: int):
         import fitz  # PyMuPDF
+        start_idx = len(self.pages)
         doc = fitz.open(filepath)
         for i, page in enumerate(doc):
             text = page.get_text("text").strip()
             if text:
                 self.pages.append({
-                    "index": i,
+                    "index": start_idx + i,
                     "text": text,
-                    "label": f"Page {i + 1}"
+                    "label": f"Page {start_idx + i + 1}",
+                    "file_id": file_id
                 })
         doc.close()
 
-    def _load_docx(self, filepath: str):
+    def _load_docx(self, filepath: str, file_id: int):
         from docx import Document
         doc = Document(filepath)
+        start_idx = len(self.pages)
         # Split by headings into chapters, otherwise into chunks
         current_chunk = []
-        chapter_idx = 0
-        chapter_label = "Section 1"
+        chapter_idx = start_idx
+        chapter_label = f"Section {start_idx + 1}"
 
         for para in doc.paragraphs:
             if para.style.name.startswith("Heading"):
@@ -243,7 +315,8 @@ class DocumentProcessor:
                     self.pages.append({
                         "index": chapter_idx,
                         "text": "\n".join(current_chunk),
-                        "label": chapter_label
+                        "label": chapter_label,
+                        "file_id": file_id
                     })
                     chapter_idx += 1
                 chapter_label = para.text.strip() or f"Section {chapter_idx + 1}"
@@ -256,29 +329,32 @@ class DocumentProcessor:
             self.pages.append({
                 "index": chapter_idx,
                 "text": "\n".join(current_chunk),
-                "label": chapter_label
+                "label": chapter_label,
+                "file_id": file_id
             })
 
         # If no headings found, chunk by ~500 words
-        if not self.pages:
+        if not self.pages or all(p.get("file_id") != file_id for p in self.pages):
             all_text = "\n".join(p.text for p in doc.paragraphs if p.text.strip())
             words = all_text.split()
             chunk_size = 500
             for i in range(0, len(words), chunk_size):
                 chunk = " ".join(words[i:i + chunk_size])
                 self.pages.append({
-                    "index": i // chunk_size,
+                    "index": start_idx + (i // chunk_size),
                     "text": chunk,
-                    "label": f"Section {i // chunk_size + 1}"
+                    "label": f"Section {start_idx + (i // chunk_size) + 1}",
+                    "file_id": file_id
                 })
 
-    def _load_epub(self, filepath: str):
+    def _load_epub(self, filepath: str, file_id: int):
         import ebooklib
         from ebooklib import epub
         from bs4 import BeautifulSoup
 
         book = epub.read_epub(filepath)
-        chapter_idx = 0
+        start_idx = len(self.pages)
+        chapter_idx = start_idx
         for item in book.get_items():
             if item.get_type() == ebooklib.ITEM_DOCUMENT:
                 soup = BeautifulSoup(item.get_content(), "html.parser")
@@ -289,19 +365,22 @@ class DocumentProcessor:
                     self.pages.append({
                         "index": chapter_idx,
                         "text": text,
-                        "label": label
+                        "label": label,
+                        "file_id": file_id
                     })
                     chapter_idx += 1
 
-    def _load_txt(self, filepath: str):
+    def _load_txt(self, filepath: str, file_id: int):
         with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
             content = f.read()
         words = content.split()
         chunk_size = 600
+        start_idx = len(self.pages)
         for i in range(0, len(words), chunk_size):
             chunk = " ".join(words[i:i + chunk_size])
             self.pages.append({
-                "index": i // chunk_size,
+                "index": start_idx + (i // chunk_size),
                 "text": chunk,
-                "label": f"Section {i // chunk_size + 1}"
+                "label": f"Section {start_idx + (i // chunk_size) + 1}",
+                "file_id": file_id
             })
